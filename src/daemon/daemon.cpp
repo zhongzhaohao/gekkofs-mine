@@ -174,6 +174,10 @@ register_server_rpcs(margo_instance_id mid) {
                    rpc_srv_truncate);
     MARGO_REGISTER(mid, gkfs::rpc::tag::get_chunk_stat, rpc_chunk_stat_in_t,
                    rpc_chunk_stat_out_t, rpc_srv_get_chunk_stat);
+    MARGO_REGISTER(mid, gkfs::rpc::tag::stage, rpc_stage_in_t,
+                   rpc_err_out_t, rpc_srv_stage);
+    MARGO_REGISTER(mid, gkfs::rpc::tag::stage_metadata, rpc_stage_metadata_in_t,
+                   rpc_stage_metadata_out_t, rpc_srv_stage_metadata);
 }
 
 /**

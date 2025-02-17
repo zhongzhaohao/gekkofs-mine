@@ -89,7 +89,9 @@ RedisBackend::RedisBackend(const std::string& path, const std::string& redis_ser
     connection_options.host = "localhost";  // Required.
     connection_options.port = port; // Optional. The default port is 6379.
     connection_options.socket_timeout = std::chrono::milliseconds(200);
-    auto rds = std::make_unique<sw::redis::Redis>(connection_options);
+    sw::redis::ConnectionPoolOptions pool_opts;
+    pool_opts.size = 3;
+    auto rds = std::make_unique<sw::redis::Redis>(connection_options,pool_opts);
     if (!rds) {
         throw std::runtime_error("Redis connection failed.");
     }

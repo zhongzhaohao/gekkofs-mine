@@ -99,7 +99,7 @@ public:
     }
 
     std::vector<Output>
-    get() const {
+    get(time_t time = 100) const {
 
         if(!Request::requires_response) {
             throw std::runtime_error("This request type does not expect a "
@@ -110,7 +110,7 @@ public:
 
         HERMES_DEBUG("Getting RPC results (pending: {})", m_futures.size());
 
-        constexpr const auto TIMEOUT = std::chrono::seconds(100);
+        auto TIMEOUT = std::chrono::seconds(time);
         constexpr const auto RETRIES = 0;
 
         std::vector<Output> result_set;

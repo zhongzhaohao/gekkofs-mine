@@ -103,9 +103,9 @@ constexpr auto chunksize = 524288; // in bytes (e.g., 524288 == 512KB)
 /* PFL configuration */
 constexpr auto use_PFL = false;
 constexpr auto PFLcomponents = 6; //number of regions to seperate
-constexpr std::array<uint64_t, PFLcomponents> PFLlayout = {0, 4 MB, 8 MB, 16 MB, 32 MB, 64 MB}; //layout :start offset of each component
-constexpr std::array<uint64_t, PFLcomponents> PFLsize = {512 KB, 1 MB, 2 MB, 4 MB, 8 MB, 16 MB};//stripe size
-constexpr std::array<uint64_t, PFLcomponents> PFLcount = {1, 3, 8, 16, 32, 64}; //stripe count 
+constexpr std::array<uint64_t, PFLcomponents> PFLlayout = { 0, 4 MB, 8 MB, 16 MB, 32 MB, 64 MB }; //layout :start offset of each component
+constexpr std::array<uint64_t, PFLcomponents> PFLsize = { 512 KB, 1 MB, 2 MB, 4 MB, 8 MB, 16 MB };//stripe size
+constexpr std::array<uint64_t, PFLcomponents> PFLcount = { 1, 3, 8, 16, 32, 64 }; //stripe count 
 inline const std::array<uint64_t, PFLcomponents >  generateID() {
     std::array<uint64_t, PFLcomponents >  chunkid;
     int pre_id = 0, pre = 0;

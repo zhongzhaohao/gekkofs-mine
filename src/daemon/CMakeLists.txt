@@ -48,11 +48,15 @@ target_sources(
           classes/rpc_data.cpp
           handler/srv_metadata.cpp
           handler/srv_management.cpp
+          handler/transport.cpp
+          handler/srv_stage.cpp
+          ../stage/stage_util.cpp
   PUBLIC ${CMAKE_SOURCE_DIR}/include/config.hpp
          ${CMAKE_SOURCE_DIR}/include/version.hpp.in
 )
 target_link_libraries(
   gkfs_daemon
+  PRIVATE gkfs_user_lib
   PUBLIC # internal libs
          metadata
          metadata_backend

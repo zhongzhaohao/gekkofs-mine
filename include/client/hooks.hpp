@@ -36,7 +36,13 @@ extern "C" {
 #include <sys/stat.h>
 #include <sys/syscall.h>
 }
+
+#ifndef BYPASS_SYSCALL
 #include <libsyscall_intercept_hook_point.h>
+#else
+#include <client/void_syscall_intercept.hpp>
+#endif
+
 
 /*
  * For PowerPC, syscall_no_intercept_wrapper() is defined in the

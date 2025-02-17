@@ -102,6 +102,7 @@ private:
     /* --Multiple GekkoFS-- */
 
     std::vector<hermes::endpoint> hosts_;
+    std::vector<std::string> hosts_name_;
     uint64_t local_host_id_;
     uint64_t fwd_host_id_;
     std::string rpc_protocol_;
@@ -151,6 +152,12 @@ public:
 
     void
     hosts(const std::vector<hermes::endpoint>& addrs);
+
+    const std::vector<std::string>&
+    hosts_name() const;
+
+    void
+    hosts_name(const std::vector<std::string>& hosts_name);
 
     /* --Multiple GekkoFS-- */
     

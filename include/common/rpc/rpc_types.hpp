@@ -139,4 +139,17 @@ MERCURY_GEN_PROC(
         rpc_registry_register_in_t,
         ((hg_const_string_t) (work_flow))((hg_const_string_t) (hcfile))((hg_const_string_t) (hfile)))
 
+MERCURY_GEN_PROC(
+        rpc_stage_in_t,
+        ((hg_const_string_t) (in_path))((hg_const_string_t) (out_path))
+        ((hg_const_string_t) (opts)))
+
+MERCURY_GEN_PROC(
+        rpc_stage_metadata_in_t,
+        ((hg_const_string_t) (path))((hg_uint32_t) (mode))((hg_uint64_t) (size))
+        ((hg_int32_t) (flag)))
+
+MERCURY_GEN_PROC(rpc_stage_metadata_out_t,
+                 ((hg_int32_t) (err))((hg_const_string_t) (db_val)))
+
 #endif // LFS_RPC_TYPES_HPP

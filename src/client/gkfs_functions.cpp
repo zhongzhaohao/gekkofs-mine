@@ -295,7 +295,7 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
  */
 int
 gkfs_create(const std::string& path, mode_t mode) {
-
+    
     // file type must be set
     switch(mode & S_IFMT) {
         case 0:

@@ -400,3 +400,34 @@ destroy_preload() {
 
     LOG(INFO, "All subsystems shut down. Client shutdown complete.");
 }
+
+
+/**
+ * @brief External functions to call linking the library
+ *
+ */
+extern "C" int
+gkfs_init() {
+    CTX->init_logging();
+
+    // from here ownwards it is safe to print messages
+    LOG(DEBUG, "Logging subsystem initialized");
+
+    gkfs::preload::init_environment();
+
+    return 0;
+}
+
+
+extern "C" int
+gkfs_end() {
+    CTX->clear_hosts();
+    LOG(DEBUG, "Peer information deleted");
+
+    ld_network_service.reset();
+    LOG(DEBUG, "RPC subsystem shut down");
+
+    LOG(INFO, "All subsystems shut down. Client shutdown complete.");
+
+    return 0;
+}

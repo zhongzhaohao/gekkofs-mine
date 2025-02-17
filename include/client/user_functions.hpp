@@ -27,25 +27,47 @@
   SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
-#ifndef IOINTERCEPT_PRELOAD_HPP
-#define IOINTERCEPT_PRELOAD_HPP
+#ifndef GEKKOFS_USER_FUNCTIONS_HPP
+#define GEKKOFS_USER_FUNCTIONS_HPP
+#include <string>
+#include <cstdint>
+#include <vector>
+#include <utility>
+#include <set>
+extern "C" {
+#include <sys/types.h>
+#include <sys/stat.h>
+}
 
-#include <client/preload_context.hpp>
+struct linux_dirent64;
+using namespace std;
+namespace gkfs {
 
-#define EUNKNOWN (-1)
+namespace rpc {
 
-#define CTX gkfs::preload::PreloadContext::getInstance()
-namespace gkfs::preload {
-void
-init_ld_env_if_needed();
-} // namespace gkfs::preload
+int
+forward_stage(size_t host_id, const std::string& in_path,const std::string& out_path,
+              const std::string& opts);
 
-#ifndef BYPASS_SYSCALL
-void
-init_preload() __attribute__((constructor));
+int
+forward_stage_metadata(const std::string& path,const mode_t mode, const size_t size,
+                    const int flag, std::string &attr) ;
 
-void
-destroy_preload() __attribute__((destructor));
-#endif
+pair<int, ssize_t>
+forward_write(const string& path, const void* buf, const off64_t offset,
+              const size_t write_size, const int8_t num_copies);
 
-#endif // IOINTERCEPT_PRELOAD_HPP
+pair<int, ssize_t>
+forward_read(const string& path, void* buf, const off64_t offset,
+             const size_t read_size, const int8_t num_copies,
+             std::set<int8_t>& failed);
+}// namespace rpc
+
+} // namespace gkfs
+extern "C" int
+gkfs_init();
+
+extern "C" int
+gkfs_end();
+
+#endif // GEKKOFS_USER_FUNCTIONS_HPP

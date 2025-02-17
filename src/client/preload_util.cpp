@@ -145,7 +145,6 @@ vector<pair<string, string>>
 load_hostfile(const std::string& path) {
 
     LOG(DEBUG, "Loading hosts file: \"{}\"", path);
-    //std::cout<<"host file path : " << path <<std::endl; 
     ifstream lf(path);
     if(!lf) {
         throw runtime_error(fmt::format("Failed to open hosts file '{}': {}",
@@ -170,7 +169,6 @@ load_hostfile(const std::string& path) {
         host = match[1];
         uri = match[2];
         hosts.emplace_back(host, uri);
-        //std::cout<<"get daemon uri:" << uri <<std::endl; 
     }
     if(hosts.empty()) {
         throw runtime_error(
@@ -525,7 +523,9 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
     bool local_host_found = false;
 
     std::vector<hermes::endpoint> addrs;
+    std::vector<std::string> hosts_name;
     addrs.resize(hosts.size());
+    hosts_name.resize(hosts.size());
 
     vector<uint64_t> host_ids(hosts.size());
     // populate vector with [0, ..., host_size - 1]
@@ -553,6 +553,7 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
         const auto& hostname = hosts.at(id).first;
         const auto& uri = hosts.at(id).second;
         addrs[id] = lookup_endpoint(uri);
+        hosts_name[id] = hostname;
         LOG(DEBUG, "Found peer: {}", addrs[id].to_string());
     }
 
@@ -570,6 +571,7 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
         }
     }
     CTX->hosts(addrs);
+    CTX->hosts_name(hosts_name);
 }
 
 /**

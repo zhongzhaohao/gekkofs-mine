@@ -214,6 +214,7 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         }
         return 0;
     }
+    return 0;
 }
 
 /**

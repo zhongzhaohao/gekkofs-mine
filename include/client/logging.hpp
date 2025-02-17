@@ -30,7 +30,11 @@
 #ifndef LIBGKFS_LOGGING_HPP
 #define LIBGKFS_LOGGING_HPP
 
+#ifndef BYPASS_SYSCALL
 #include <libsyscall_intercept_hook_point.h>
+#else
+#include <client/void_syscall_intercept.hpp>
+#endif
 
 #include <type_traits>
 #include <client/make_array.hpp>

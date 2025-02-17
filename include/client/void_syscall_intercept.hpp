@@ -1,6 +1,6 @@
 /*
-  Copyright 2018-2024, Barcelona Supercomputing Center (BSC), Spain
-  Copyright 2015-2024, Johannes Gutenberg Universitaet Mainz, Germany
+  Copyright 2018-2022, Barcelona Supercomputing Center (BSC), Spain
+  Copyright 2015-2022, Johannes Gutenberg Universitaet Mainz, Germany
 
   This software was partially supported by the
   EC H2020 funded project NEXTGenIO (Project ID: 671951, www.nextgenio.eu).
@@ -26,26 +26,20 @@
 
   SPDX-License-Identifier: LGPL-3.0-or-later
 */
+#ifndef SYSCALL_BYPASS_HPP
+#define SYSCALL_BYPASS_HPP
 
-#ifndef IOINTERCEPT_PRELOAD_HPP
-#define IOINTERCEPT_PRELOAD_HPP
+static inline int
+syscall_error_code(long result) {
+    if(result < 0 && result >= -0x1000)
+        return (int) -result;
 
-#include <client/preload_context.hpp>
+    return 0;
+}
 
-#define EUNKNOWN (-1)
+extern "C" {
+long
+syscall_no_intercept(long syscall_number, ...);
+}
 
-#define CTX gkfs::preload::PreloadContext::getInstance()
-namespace gkfs::preload {
-void
-init_ld_env_if_needed();
-} // namespace gkfs::preload
-
-#ifndef BYPASS_SYSCALL
-void
-init_preload() __attribute__((constructor));
-
-void
-destroy_preload() __attribute__((destructor));
 #endif
-
-#endif // IOINTERCEPT_PRELOAD_HPP

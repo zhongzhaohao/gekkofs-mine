@@ -44,6 +44,23 @@ extern "C" {
 #include <printf.h>
 }
 
+#ifdef BYPASS_SYSCALL
+int (*intercept_hook_point)(long syscall_number, long arg0, long arg1,
+                            long arg2, long arg3, long arg4, long arg5,
+                            long* result){};
+
+void (*intercept_hook_point_clone_child)(unsigned long flags, void* child_stack,
+                                         int* ptid, int* ctid, long newtls){};
+
+void (*intercept_hook_point_clone_parent)(unsigned long flags,
+                                          void* child_stack, int* ptid,
+                                          int* ctid, long newtls,
+                                          long returned_pid){};
+
+void (*intercept_hook_point_post_kernel)(long syscall_number, long arg0,
+                                         long arg1, long arg2, long arg3,
+                                         long arg4, long arg5, long result){};
+#endif
 namespace {
 
 thread_local bool reentrance_guard_flag;

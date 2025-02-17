@@ -36,6 +36,8 @@
 void
 hermes::detail::register_user_request_types() {
     (void) registered_requests().add<gkfs::rpc::fs_config>();
+    (void) registered_requests().add<gkfs::rpc::stage>();
+    (void) registered_requests().add<gkfs::rpc::stage_metadata>();
     (void) registered_requests().add<gkfs::rpc::registry_request>();// --Multiple GekkoFS--
     (void) registered_requests().add<gkfs::rpc::registry_register>();// --Multiple GekkoFS--
     (void) registered_requests().add<gkfs::rpc::create>();

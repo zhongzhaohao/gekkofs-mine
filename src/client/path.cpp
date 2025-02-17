@@ -39,9 +39,14 @@
 #include <cassert>
 #include <climits>
 
+#ifndef BYPASS_SYSCALL
+#include <libsyscall_intercept_hook_point.h>
+#else
+#include <client/void_syscall_intercept.hpp>
+#endif
+
 extern "C" {
 #include <sys/stat.h>
-#include <libsyscall_intercept_hook_point.h>
 }
 
 using namespace std;

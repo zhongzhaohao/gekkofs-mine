@@ -42,8 +42,13 @@
 
 #include <cassert>
 
-extern "C" {
+#ifndef BYPASS_SYSCALL
 #include <libsyscall_intercept_hook_point.h>
+#else
+#include <client/void_syscall_intercept.hpp>
+#endif
+
+extern "C" {
 #include <syscall.h>
 }
 
@@ -143,6 +148,16 @@ PreloadContext::hosts() const {
 void
 PreloadContext::hosts(const std::vector<hermes::endpoint>& endpoints) {
     hosts_ = endpoints;
+}
+
+const std::vector<std::string>&
+PreloadContext::hosts_name() const {
+    return hosts_name_;
+}
+
+void
+PreloadContext::hosts_name(const std::vector<std::string>& hosts_name) {
+    hosts_name_ = hosts_name;
 }
 
 /* --Multiple GekkoFS-- */

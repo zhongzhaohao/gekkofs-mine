@@ -1,6 +1,6 @@
 ################################################################################
-# Copyright 2018-2024, Barcelona Supercomputing Center (BSC), Spain            #
-# Copyright 2015-2024, Johannes Gutenberg Universitaet Mainz, Germany          #
+# Copyright 2018-2023, Barcelona Supercomputing Center (BSC), Spain            #
+# Copyright 2015-2023, Johannes Gutenberg Universitaet Mainz, Germany          #
 #                                                                              #
 # This software was partially supported by the                                 #
 # EC H2020 funded project NEXTGenIO (Project ID: 671951, www.nextgenio.eu).    #
@@ -27,33 +27,7 @@
 ################################################################################
 
 target_sources(
-  gkfs_daemon
-  PUBLIC daemon.hpp
-         util.hpp
-         ops/data.hpp
-         ops/metadentry.hpp
-         classes/fs_data.hpp
-         classes/rpc_data.hpp
-         handler/rpc_defs.hpp
-         handler/rpc_util.hpp
-         ../stage/stage_util.hpp
+  gkfs_stage
+  PUBLIC stage_util.hpp
+  	    stage.hpp
 )
-
-if(GKFS_ENABLE_FORWARDING)
-  target_sources(
-    gkfwd_daemon
-    PUBLIC daemon.hpp
-           util.hpp
-           ops/data.hpp
-           ops/metadentry.hpp
-           classes/fs_data.hpp
-           classes/rpc_data.hpp
-           handler/rpc_defs.hpp
-           handler/rpc_util.hpp
-  )
-
-  if(GKFS_ENABLE_AGIOS)
-    target_sources(gkfwd_daemon PUBLIC scheduler/agios.hpp)
-  endif()
-
-endif()

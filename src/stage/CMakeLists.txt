@@ -26,34 +26,27 @@
 # SPDX-License-Identifier: GPL-3.0-or-later                                    #
 ################################################################################
 
-target_sources(
-  gkfs_daemon
-  PUBLIC daemon.hpp
-         util.hpp
-         ops/data.hpp
-         ops/metadentry.hpp
-         classes/fs_data.hpp
-         classes/rpc_data.hpp
-         handler/rpc_defs.hpp
-         handler/rpc_util.hpp
-         ../stage/stage_util.hpp
+# ##############################################################################
+# This builds the `gkfs_stage` executable.
+# ##############################################################################
+
+set(CMAKE_CXX_STANDARD 17)
+add_executable(gkfs_stage)
+
+target_sources(gkfs_stage
+  PRIVATE stage.cpp
+          stage_util.cpp
+)
+# We need to add here any files that may have different compile definitions
+
+target_link_libraries(gkfs_stage
+    PRIVATE gkfs_user_lib
+    # external libs
+    CLI11::CLI11
 )
 
-if(GKFS_ENABLE_FORWARDING)
-  target_sources(
-    gkfwd_daemon
-    PUBLIC daemon.hpp
-           util.hpp
-           ops/data.hpp
-           ops/metadentry.hpp
-           classes/fs_data.hpp
-           classes/rpc_data.hpp
-           handler/rpc_defs.hpp
-           handler/rpc_util.hpp
-  )
+install(TARGETS gkfs_stage RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-  if(GKFS_ENABLE_AGIOS)
-    target_sources(gkfwd_daemon PUBLIC scheduler/agios.hpp)
-  endif()
 
-endif()
+
+

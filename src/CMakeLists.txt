@@ -34,4 +34,6 @@ add_subdirectory(daemon)
 add_subdirectory(client)
 # Registry
 add_subdirectory(registry)
+# Stage
+add_subdirectory(stage)
 

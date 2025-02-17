@@ -27,25 +27,21 @@
   SPDX-License-Identifier: LGPL-3.0-or-later
 */
 
-#ifndef IOINTERCEPT_PRELOAD_HPP
-#define IOINTERCEPT_PRELOAD_HPP
+#ifndef GEKKOFS_CLIENT_FORWARD_STAGE_HPP
+#define GEKKOFS_CLIENT_FORWARD_STAGE_HPP
+#include <string>
+namespace gkfs::rpc {
 
-#include <client/preload_context.hpp>
 
-#define EUNKNOWN (-1)
+int
+forward_stage(size_t host_id, const std::string& in_path,const std::string& out_path,
+              const size_t count, const size_t offset, const int flag) ;
 
-#define CTX gkfs::preload::PreloadContext::getInstance()
-namespace gkfs::preload {
-void
-init_ld_env_if_needed();
-} // namespace gkfs::preload
+int
+forward_stage_metadata(const std::string& path,const mode_t mode, const size_t size,
+                    const int flag, std::string &attr)  ;
 
-#ifndef BYPASS_SYSCALL
-void
-init_preload() __attribute__((constructor));
 
-void
-destroy_preload() __attribute__((destructor));
-#endif
+} // namespace gkfs::rpc
 
-#endif // IOINTERCEPT_PRELOAD_HPP
+#endif // GEKKOFS_CLIENT_FORWARD_STAGE_HPP

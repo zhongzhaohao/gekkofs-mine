@@ -37,6 +37,11 @@ extern "C" {
 #include <margo.h>
 }
 
+/* stage */
+DECLARE_MARGO_RPC_HANDLER(rpc_srv_stage)
+
+DECLARE_MARGO_RPC_HANDLER(rpc_srv_stage_metadata)
+
 /* visible API for RPC operations */
 
 DECLARE_MARGO_RPC_HANDLER(rpc_srv_get_fs_config)
