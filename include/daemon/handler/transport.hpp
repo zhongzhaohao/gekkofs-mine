@@ -14,7 +14,9 @@
 #include <cstring>
 #include <sstream>
 #include <vector>
+#include <memory>
 #include <stdexcept>
+#include <variant>
 
 #define Div(a, b) ( ((a) + (b) - 1) / (b))
 
@@ -51,6 +53,43 @@ struct Transport_options {
             std::stoull(parts[7])
         };
     }
+};
+
+struct AlignedDeleter {
+    void operator()(void* ptr) const {
+        std::free(ptr);
+    }
+};
+
+
+class ScopedBuffer {
+public:
+    ScopedBuffer(size_t size, bool require_aligned, size_t alignment = 4096)
+        : size_(size), aligned_(require_aligned) 
+    {
+        if (require_aligned) {
+            void* ptr;
+            if (posix_memalign(&ptr, alignment, size) != 0) {
+                throw std::bad_alloc();
+            }
+            buffer_ = std::unique_ptr<void, AlignedDeleter>(ptr);
+        } else {
+            buffer_ = std::unique_ptr<char[]>(new char[size]);
+        }
+    }
+
+    void* get() const noexcept { 
+        return std::visit([](const auto& ptr) { 
+            return static_cast<void*>(ptr.get()); 
+        }, buffer_);
+    }
+
+private:
+    size_t size_;
+    bool aligned_;
+    std::variant<
+        std::unique_ptr<void, AlignedDeleter>,
+        std::unique_ptr<char[]>> buffer_;
 };
 
 int forward_transport(const std::string& src, const std::string& dest, 

@@ -48,6 +48,7 @@
 #include <daemon/backend/data/chunk_storage.hpp>
 #include <daemon/util.hpp>
 #include <CLI/CLI.hpp>
+#include <client/user_functions.hpp>
 
 #ifdef GKFS_ENABLE_AGIOS
 #include <daemon/scheduler/agios.hpp>
@@ -365,6 +366,7 @@ init_environment() {
         gkfs::utils::populate_hosts_file();
     }
     GKFS_DATA->spdlogger()->info("Startup successful. Daemon is ready.");
+    GKFS_DATA->is_initialized(false);
 }
 
 #ifdef GKFS_ENABLE_AGIOS
@@ -435,6 +437,8 @@ destroy_enviroment() {
         fs::remove_all(GKFS_DATA->rootdir(), ecode);
     }
     GKFS_DATA->close_stats();
+    if(GKFS_DATA->is_initialized())
+        gkfs_end();
 }
 
 /**

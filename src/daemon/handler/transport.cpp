@@ -164,26 +164,19 @@ void outer_thread(int src_fd, int dest_fd, const std::string& src,
 
     try {
         //malloc buffers
-        std::vector<void*> buffers(N_buffers);
+        std::vector<void*> buffers{};
+        size_t total_size = BUFFER_SIZE * N_buffers;
+        ScopedBuffer total_buffer(
+            total_size, 
+            (flag & STAGE_O_DIRECT) && !stage_in,
+            opts.o_direct_blk_size
+        );
+    
+        char* base_ptr = static_cast<char*>(total_buffer.get());
         for (int i = 0; i < N_buffers; ++i) {
-            if(flag & STAGE_O_DIRECT && !stage_in){
-                if (posix_memalign(&buffers[i], opts.o_direct_blk_size, BUFFER_SIZE) != 0) {
-                    for (int j = 0; j < i; ++j) {
-                        free(buffers[j]);
-                    }
-                    throw std::system_error(EINVAL, std::system_category(), "Failed to malloc o_direct buffer.");
-                }
-            } else {
-                try{
-                    buffers[i] = new char[BUFFER_SIZE];
-                } catch (const std::bad_alloc& e) {
-                    for (int j = 0; j < i; ++j) {
-                        delete[] static_cast<char*>(buffers[j]);
-                    }
-                    throw std::system_error(errno, std::system_category(), "Failed to malloc buffer.");
-                }
-            }
+            buffers.emplace_back(base_ptr + i * BUFFER_SIZE);
         }
+
         std::vector<bool> buffer_ready(N_buffers, false);
         std::mutex mtx;
         std::condition_variable cv_read;
@@ -202,14 +195,6 @@ void outer_thread(int src_fd, int dest_fd, const std::string& src,
         t_read.join();
         t_write.join();
 
-        //free buffers
-        for (int i = 0; i < N_buffers; ++i) {
-            if(flag & STAGE_O_DIRECT && !stage_in){
-                free(buffers[i]);
-            } else{
-                delete[] static_cast<char*>(buffers[i]);
-            } 
-        }
     } catch (const std::system_error& e) {
         std::cerr << "system error: " << e.what() << std::endl;
         {
@@ -230,7 +215,6 @@ void outer_thread(int src_fd, int dest_fd, const std::string& src,
 
 
 int forward_transport(const std::string& src, const std::string& dest, const std::string& opts_str){
-    gkfs_init();
     int exit_code = 0;
     int src_fd = -1;
     int dest_fd = -1;
@@ -299,7 +283,6 @@ int forward_transport(const std::string& src, const std::string& dest, const std
 
     if (src_fd != -1) close(src_fd);
     if (dest_fd != -1) close(dest_fd);
-    gkfs_end();
     if(!exit_code && errors.size()){
         exit_code = errors.front();
     }

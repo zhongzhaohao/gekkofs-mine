@@ -82,6 +82,20 @@ std::string get_abs_path(const std::string& path) {
     }
 }
 
+static std::string norm(const std::string& path) {
+    std::string res = path;
+    while (res.size() > 0&& res.back() == '/') res.pop_back();
+    return res;
+}
+
+std::string get_rel_path(const std::string& path, const std::string& prefix) {
+    std::string path_norm = norm(path);
+    std::string prefix_norm = norm(prefix);
+    std::string rel = path_norm.substr(prefix_norm.size());
+    return rel.empty() ? "/" : rel;
+
+}
+
 void parrallel_stage(const size_t host_id, const std::string src, const std::string dest, 
                     const std::string str_opts){
                         
@@ -132,7 +146,7 @@ int main(int argc, char* argv[]){
         return desc.exit(e);
     }
 
-
+    auto s1= std::chrono::high_resolution_clock::now();
     gkfs_init();
     std::string mountDir = CTX->mountdir();
     opts.src = get_abs_path(opts.src);
@@ -156,24 +170,31 @@ int main(int argc, char* argv[]){
     struct stat st;
     std::string attr;
 
+    auto s2= std::chrono::high_resolution_clock::now();
     //handle metadata
     if(in){
         if (stat(src.c_str(), &st) == -1) {
             std::cerr << "Source file " << src << " doesn't exist." << std::endl;
             exit(1);
         }
-        dest = dest.substr(mountDir.size());
+        dest = get_rel_path(dest, mountDir);
         auto err = gkfs::rpc::forward_stage_metadata(dest, st.st_mode, st.st_size, flag, attr);
         if(err){
             if(err == ENOENT)
                 std::cerr << opts.dest << ": parent directory doesn't exist."<< std::endl;
-            else
-                std::cerr << opts.dest << ": metadata failed to stage in gekkofs." << std::endl;
+            else if(err == EISDIR)
+                std::cerr << opts.dest << ": is a directory."<< std::endl;
+            else if(err == ENOTDIR)
+                std::cerr << opts.dest << ": parent directory is not directory."<< std::endl;
+            else {
+                std::error_code ec(err, std::system_category());
+                std::cerr << "Metadata Error: " << ec.message() << std::endl;
+            }
             exit(1);
         } 
         fsize = st.st_size;
     } else {
-        src = src.substr(mountDir.size());
+        src = get_rel_path(src, mountDir);
         auto err = gkfs::rpc::forward_stage_metadata(src, st.st_mode, st.st_size, flag, attr);
         if(err){
             if(err == ENOENT)
@@ -187,7 +208,7 @@ int main(int argc, char* argv[]){
         }
         fsize = md.size();
     }
-
+    auto s3= std::chrono::high_resolution_clock::now();
     //init transport options of all nodes
     trans_opt_init.flag = flag;
     std::vector<Transport_options> trans_opts(nodes, trans_opt_init);
@@ -214,10 +235,11 @@ int main(int argc, char* argv[]){
     std::cout<< "Used "<< nodes << " nodes"<<" malloc " << convertBytes(mem_used) << " as total."<<std::endl;
 
     //forward real stage to daemons
-    //TODO forward_stage wait too long.
     std::vector<std::thread> stage_threads;
     std::vector<size_t> host_ids{};
+    std::cout<< "Hosts in progress: ";
     for(long unsigned int idx = 0; idx < nodes && remaining > 0; idx++)   {
+        std::cout<<CTX->hosts_name()[hosts[idx]]<< ",";
         host_ids.push_back(hosts[idx]);
         n_size += idx > (nodes - marks - 1)? trans_opt_init.buffer_size : 0;
         auto count = std::min(n_size, remaining);
@@ -226,6 +248,7 @@ int main(int argc, char* argv[]){
         remaining -=  count;
         offset += count;
     }
+    std::cout<<std::endl;
 
     for(long unsigned int idx = 0; idx < host_ids.size(); idx++)   {
         stage_threads.emplace_back(parrallel_stage, host_ids[idx], src, 
@@ -236,9 +259,19 @@ int main(int argc, char* argv[]){
         thread.join();
     }
 
+    auto s4= std::chrono::high_resolution_clock::now();
+    //stage out: if dest file already exist before stage and is bigger than 
+    //current stage out file size, we cut off the extra size.
     if(!(flag & STAGE_IN)){
         truncate64(dest.c_str(),fsize);
     }
     gkfs_end();
+
+    auto s5= std::chrono::high_resolution_clock::now();
+    std::cout << "startup time: " << std::chrono::duration_cast<std::chrono::microseconds>(s2 - s1).count()/1000.0/1000.0 <<"s"<< std::endl;
+    std::cout << "metadata time: " << std::chrono::duration_cast<std::chrono::microseconds>(s3 - s2).count()/1000.0/1000.0 <<"s"<< std::endl;
+    std::cout << "data time: " << std::chrono::duration_cast<std::chrono::microseconds>(s4 - s3).count()/1000.0/1000.0 <<"s"<< std::endl;
+    std::cout << "endup time: " << std::chrono::duration_cast<std::chrono::microseconds>(s5 - s4).count()/1000.0/1000.0 <<"s"<< std::endl;
+    std::cout << "all time: " << std::chrono::duration_cast<std::chrono::microseconds>(s5 - s1).count()/1000.0/1000.0 <<"s"<< std::endl;
     return 0;
 }

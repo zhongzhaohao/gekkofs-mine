@@ -58,19 +58,16 @@ private:
     std::unordered_set<std::string> node_set;
     std::unordered_map<std::string, std::vector<std::pair<int, int>>> prefix_ranges;
 
-    // 快速解析节点前缀和编号
     static bool parse_node(const std::string& s, std::string& prefix, int& num) {
         prefix.clear();
         num = 0;
-        
+
         size_t i = 0;
-        // 提取前缀字母部分
         while (i < s.size() && std::isalpha(s[i])) {
             prefix += s[i++];
         }
         if (prefix.empty() || i == s.size()) return false;
 
-        // 转换数字部分
         try {
             num = std::stoi(s.substr(i));
         } catch (...) {
@@ -80,72 +77,62 @@ private:
     }
 
 public:
-    // 在 parse 函数中修改为指针操作风格：
     void parse(const std::string& list) {
         node_set.clear();
         prefix_ranges.clear();
 
-        const char* start = list.data() + 1; // 跳过[
-        const char* end = list.data() + list.size() - 1; // 跳过]
-        
+        size_t bracket_pos = list.find('[');
+        if (bracket_pos == std::string::npos || list.back() != ']')
+            return;
+
+        std::string prefix = list.substr(0, bracket_pos);
+        std::string content = list.substr(bracket_pos + 1, list.size() - bracket_pos - 2);
+
+        const char* start = content.data();
+        const char* end = content.data() + content.size();
+
         while (start < end) {
             const char* comma = std::find(start, end, ',');
             std::string entry(start, comma);
-            
-            // 使用C字符串函数查找'-'
+
             if (const char* dash = std::strchr(entry.c_str(), '-')) {
                 std::string start_str(entry.c_str(), dash);
                 std::string end_str(dash + 1);
-                
-                std::string sprefix, eprefix;
-                int snum, enum_;
-                if (parse_node(start_str, sprefix, snum) && 
-                    parse_node(end_str, eprefix, enum_)) 
-                {
-                    if (eprefix.empty()) eprefix = sprefix;
-                    if (sprefix == eprefix) {
-                        prefix_ranges[sprefix].emplace_back(snum, enum_);
-                    }
-                }
-            } else {
-                node_set.insert(entry);
+                try {
+                    int snum = std::stoi(start_str);
+                    int enum_ = std::stoi(end_str);
+                    prefix_ranges[prefix].emplace_back(snum, enum_);
+                } catch (...) {  }
             }
-            
+            else {
+                try {
+                    node_set.insert(prefix + entry); 
+                } catch (...) {  }
+            }
+
             start = comma + (comma < end ? 1 : 0);
         }
 
-        // 排序每个前缀的范围
         for (auto& [p, ranges] : prefix_ranges) {
             std::sort(ranges.begin(), ranges.end());
         }
     }
 
     bool contains(const std::string& target) const {
-        // 快速检查哈希表
         if (node_set.count(target)) return true;
-        
-        // 解析目标节点
+
         std::string prefix;
         int num;
         if (!parse_node(target, prefix, num)) return false;
-        
+
         auto it = prefix_ranges.find(prefix);
         if (it == prefix_ranges.end()) return false;
-        
-        // 二分查找范围
+
         const auto& ranges = it->second;
         auto pos = std::upper_bound(ranges.begin(), ranges.end(), num,
-            [](int value, const auto& range) {
-                return value < range.first;
-            });
-        
-        if (pos != ranges.begin()) {
-            --pos;
-            if (num >= pos->first && num <= pos->second) {
-                return true;
-            }
-        }
-        return false;
+            [](int value, const auto& range) { return value < range.first; });
+
+        return (pos != ranges.begin() && num <= (--pos)->second);
     }
 };
 

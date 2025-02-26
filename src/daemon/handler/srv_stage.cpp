@@ -39,7 +39,7 @@
 #include <daemon/backend/data/chunk_storage.hpp>
 #include <daemon/ops/metadentry.hpp>
 #include <daemon/handler/transport.hpp>
-
+#include <client/user_functions.hpp>
 #include <common/path_util.hpp>
 #include <common/rpc/rpc_types.hpp>
 #include <common/statistics/stats.hpp>
@@ -75,6 +75,10 @@ rpc_srv_stage(hg_handle_t handle) {
     GKFS_DATA->spdlogger()->debug("{}() path: '{}'", __func__, in.in_path);
 
     try {
+        if(!GKFS_DATA->is_initialized()){
+            gkfs_init();
+            GKFS_DATA->is_initialized(true);
+        }
         auto ret = forward_transport(in.in_path, in.out_path, in.opts);
         out.err = ret;
     } catch(const std::exception& e) {
@@ -115,22 +119,32 @@ rpc_srv_stage_metadata(hg_handle_t handle) {
     std::string val;
     try {
         out.err = 0;
-        if(in.flag & STAGE_IN){
+        if(in.flag & STAGE_IN){ //stage in
             if(GKFS_DATA->mdb()->exists(in.path)){
                 /* ignore this ?*/
                 auto md = gkfs::metadata::get(in.path);
-                if(S_ISREG(md.mode()) && (md.size() != 0))
+                if(S_ISDIR(md.mode())){ //exists and is dir
+                    out.err = EISDIR;
+                } else if(S_ISREG(md.mode()) && (md.size() != 0)){
                     GKFS_DATA->storage()->destroy_chunk_space(in.path);
+                }
             } 
-            std::string dir = gkfs::path::dirname(in.path);
-            if(GKFS_DATA->mdb()->exists(dir)){
-                gkfs::metadata::Metadata md(in.mode);
-                md.size(in.size);
-                gkfs::metadata::update(in.path, md);
-            } else {
-                out.err = ENOENT;
+            if(!out.err){ 
+                std::string dir = gkfs::path::dirname(in.path);
+                if(GKFS_DATA->mdb()->exists(dir)){
+                    auto dirmd = gkfs::metadata::get(dir);
+                    if(S_ISDIR(dirmd.mode())){
+                        gkfs::metadata::Metadata md(in.mode);
+                        md.size(in.size);
+                        gkfs::metadata::update(in.path, md);
+                    } else {
+                        out.err = ENOTDIR;
+                    }
+                } else {
+                    out.err = ENOENT;
+                }
             }
-        } else {
+        } else { //stage out
             if(GKFS_DATA->mdb()->exists(in.path)){
                 val = gkfs::metadata::get_str(in.path);
                 out.db_val = val.c_str();

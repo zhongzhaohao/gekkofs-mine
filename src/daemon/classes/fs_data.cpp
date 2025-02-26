@@ -33,6 +33,16 @@
 
 namespace gkfs::daemon {
 
+bool
+FsData::is_initialized() const {
+    return is_initialized_;
+}
+
+void
+FsData::is_initialized(bool is_initialized) {
+    FsData::is_initialized_ = is_initialized;
+}
+
 // getter/setter
 
 const std::shared_ptr<spdlog::logger>&

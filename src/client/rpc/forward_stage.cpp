@@ -49,7 +49,7 @@ forward_stage_metadata(const std::string& path,const mode_t mode, const size_t s
     gkfs::rpc::stage_metadata::input in(path, mode, size, flag);
 
     try {
-        LOG(DEBUG, "Retrieving merge files from registry");
+        LOG(DEBUG, "Staging is processing file metadata.");
 
         out = ld_network_service->post<gkfs::rpc::stage_metadata>(endp,in).get(1200).at(0);
         

@@ -58,6 +58,9 @@ class FsData {
 private:
     FsData() = default;
 
+    //stage
+    bool is_initialized_;
+
     // logger
     std::shared_ptr<spdlog::logger> spdlogger_;
 
@@ -112,6 +115,12 @@ public:
 
     void
     operator=(FsData const&) = delete;
+
+    bool
+    is_initialized() const;
+
+    void
+    is_initialized(bool is_initialized);
 
     // getter/setter
 
