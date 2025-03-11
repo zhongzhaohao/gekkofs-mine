@@ -37,7 +37,8 @@
 #include <daemon/handler/rpc_defs.hpp>
 
 #include <common/rpc/rpc_types.hpp>
-
+#include <iostream>
+#include <fstream>
 extern "C" {
 #include <unistd.h>
 }
@@ -86,6 +87,30 @@ rpc_srv_get_fs_config(hg_handle_t handle) {
     return HG_SUCCESS;
 }
 
+hg_return_t
+rpc_srv_get_bloom_filter(hg_handle_t handle) {
+    rpc_bloom_filter_out_t out{};
+
+    GKFS_DATA->spdlogger()->debug("{}() Got config RPC", __func__);
+
+    std::string bloom_filter_str = GKFS_DATA->Bloom_filter().serialize();
+    out.bloom_filter_str = bloom_filter_str.c_str();
+
+    GKFS_DATA->spdlogger()->debug("{}() Sending output configs back to library",
+                                  __func__);
+    auto hret = margo_respond(handle, &out);
+    if(hret != HG_SUCCESS) {
+        GKFS_DATA->spdlogger()->error(
+                "{}() Failed to respond to client to bloom filters",
+                __func__);
+    }
+
+    // Destroy handle when finished
+    margo_destroy(handle);
+    return HG_SUCCESS;
+}
+
 } // namespace
 
 DEFINE_MARGO_RPC_HANDLER(rpc_srv_get_fs_config)
+DEFINE_MARGO_RPC_HANDLER(rpc_srv_get_bloom_filter)

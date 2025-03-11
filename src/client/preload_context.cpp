@@ -215,6 +215,11 @@ void
 PreloadContext::local_fs_id(uint64_t id) {
     local_fs_id_ = id;
 }
+
+std::vector<bloom_filter>&
+PreloadContext::bloom_filter_vec() {
+    return bloom_filter_vec_;
+}
 /* --Multiple GekkoFS-- */
 
 void

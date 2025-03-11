@@ -226,6 +226,20 @@ SimpleHashDistributor::locate_file_metadata(const string& path,
 
 /**
  * --Multiple GekkoFS--
+ */
+host_t
+SimpleHashDistributor::locate_file_metadata_fs(const string& path,
+                                            const int num_copy, const int fs) const {
+    unsigned int fs_id = fs;
+    if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
+    unsigned int prefix_hosts = 0;
+    for(unsigned int fs = 0 ;fs < fs_id ; fs++)
+        prefix_hosts += hosts_size_[fs];
+    return (str_hash(path) + num_copy) % hosts_size_.at(fs_id) + prefix_hosts;
+}
+
+/**
+ * --Multiple GekkoFS--
  * Locate host(daemon) ids for dir metadata
  * Only used at Client
  */

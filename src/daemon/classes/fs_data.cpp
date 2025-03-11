@@ -28,7 +28,7 @@
 
 #include <daemon/classes/fs_data.hpp>
 #include <daemon/backend/metadata/db.hpp>
-
+#include <common/bloom_filter.hpp>
 #include <spdlog/spdlog.h>
 
 namespace gkfs::daemon {
@@ -41,6 +41,16 @@ FsData::is_initialized() const {
 void
 FsData::is_initialized(bool is_initialized) {
     FsData::is_initialized_ = is_initialized;
+}
+
+bloom_filter&
+FsData::Bloom_filter() {
+    return bloom_filter_;
+}
+
+void
+FsData::Bloom_filter(const bloom_filter Bloom_filter){
+    FsData::bloom_filter_ = Bloom_filter;
 }
 
 // getter/setter

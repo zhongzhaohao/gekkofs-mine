@@ -30,6 +30,7 @@
 #ifndef GEKKOFS_PRELOAD_CTX_HPP
 #define GEKKOFS_PRELOAD_CTX_HPP
 
+#include <common/bloom_filter.hpp>
 #include <hermes.hpp>
 #include <map>
 #include <mercury.h>
@@ -99,6 +100,7 @@ private:
     std::vector<unsigned int> fspriority_;  // FsPriority of Each GekkoFS -- used for data consistency
     std::map<std::string, unsigned int> pathfs_; // Cache of GekkoFS id where path exists
     uint64_t local_fs_id_; // Id of GekkoFS having local host(daemon)
+    std::vector<bloom_filter> bloom_filter_vec_;  //bloom filter
     /* --Multiple GekkoFS-- */
 
     std::vector<hermes::endpoint> hosts_;
@@ -194,6 +196,9 @@ public:
 
     void
     local_fs_id(uint64_t id);
+
+    std::vector<bloom_filter>&
+    bloom_filter_vec();
     /* --Multiple GekkoFS-- */
 
     void

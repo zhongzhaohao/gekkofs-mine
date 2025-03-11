@@ -36,6 +36,7 @@
 #include <client/rpc/forward_data.hpp>
 #include <client/open_dir.hpp>
 
+#include <common/rpc/distributor.hpp>
 #include <common/path_util.hpp>
 
 extern "C" {
@@ -104,9 +105,22 @@ static void clear_all_pathfs(){
  * Cache fs id where path exists through get_metadata(path)
  * @param path
  */
-static void add_one_pathfs(std::string path){
-    if(CTX->hostsconfig().size() > 1 && !CTX->pathfs().count(path)){
-        gkfs::utils::get_metadata(path);
+static void add_one_pathfs(std::string path, const char * f){
+    std::vector<unsigned int> fs_list;
+    if(CTX->hostsconfig().size() > 1 ){
+        if(!CTX->pathfs().count(path)){
+            for(int fs = 0; fs < CTX->hostsconfig().size(); fs++){
+                auto id = CTX->distributor()->locate_file_metadata_fs(path, 0, fs);
+                if (CTX->bloom_filter_vec().at(id).contains(path)){
+                    fs_list.push_back(fs);
+                }
+            }
+            if (fs_list.size() == 1){
+                CTX->pathfs()[path] = fs_list.front();
+            } else if(fs_list.size() > 1){
+                gkfs::utils::get_metadata(path);
+            }
+        }
     }
 }
 

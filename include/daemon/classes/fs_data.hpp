@@ -30,7 +30,7 @@
 #define LFS_FS_DATA_H
 
 #include <daemon/daemon.hpp>
-
+#include <common/bloom_filter.hpp>
 #include <unordered_map>
 #include <map>
 #include <functional> //std::hash
@@ -60,6 +60,9 @@ private:
 
     //stage
     bool is_initialized_;
+
+    //bloom_filter
+    bloom_filter bloom_filter_;
 
     // logger
     std::shared_ptr<spdlog::logger> spdlogger_;
@@ -122,6 +125,12 @@ public:
     void
     is_initialized(bool is_initialized);
 
+    bloom_filter&
+    Bloom_filter();
+
+    void
+    Bloom_filter(const bloom_filter Bloom_filter);
+    
     // getter/setter
 
     const std::shared_ptr<spdlog::logger>&

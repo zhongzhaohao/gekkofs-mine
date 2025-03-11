@@ -71,8 +71,8 @@ struct forward_stat_fs_args{
 int
 forward_create(const std::string& path, const mode_t mode, const int copy) {
 
-    auto endp = CTX->hosts().at(
-            CTX->distributor()->locate_file_metadata(path, copy));
+    auto id = CTX->distributor()->locate_file_metadata(path, copy);
+    auto endp = CTX->hosts().at(id);
 
     try {
         LOG(DEBUG, "Sending RPC ...");
@@ -85,8 +85,12 @@ forward_create(const std::string& path, const mode_t mode, const int copy) {
                            .get()
                            .at(0);
         LOG(DEBUG, "Got response success: {}", out.err());
-
-        return out.err() ? out.err() : 0;
+        if(out.err()){
+            return out.err();
+        }
+        if(CTX->use_registry())
+            CTX->bloom_filter_vec().at(id).insert(path);
+        return 0;
     } catch(const std::exception& ex) {
         LOG(ERROR, "while getting rpc output");
         return EBUSY;
@@ -109,7 +113,6 @@ forward_getSuccessResponseThread(void* data){
     auto endp = CTX->hosts().at(hostid);
   
     try {
-            //cout<<"--forward_getResponseThread() -Sending RPC--"<<endl;
             auto out = ld_network_service->post<gkfs::rpc::stat>(endp, statfs_args->path)
                             .get()
                             .at(0);
@@ -150,14 +153,31 @@ forward_stat(const std::string& path, string& attr, const int copy) {
             }
         }
 
+        std::vector<unsigned int> fs_list;
+        if(!CTX->pathfs().count(path)){
+            for(int fs = 0; fs < CTX->hostsconfig().size(); fs++){
+                auto id = CTX->distributor()->locate_file_metadata_fs(path, copy, fs);
+                if (CTX->bloom_filter_vec().at(id).contains(path)){
+                    fs_list.push_back(fs);
+                }
+            }
+            if (fs_list.size() == 0){
+                fs_list.push_back(CTX->local_fs_id());
+             }
+        } else {
+            fs_list.push_back(CTX->pathfs()[path]);
+        }
+
+        total_fs_num = fs_list.size();
         pthread_t threads[total_fs_num];
         forward_stat_fs_args statfs_args[total_fs_num];
         vector<pair<unsigned int, string>> founds;
 
         for(int i = 0; i < total_fs_num; i++){
-            statfs_args[i].fsId = i;
-            statfs_args[i].hostsize_single = hostsconfig_array[i];
-            statfs_args[i].prefix_num = prefix_num_array[i];
+            auto fs = fs_list[i];
+            statfs_args[i].fsId = fs;
+            statfs_args[i].hostsize_single = hostsconfig_array[fs];
+            statfs_args[i].prefix_num = prefix_num_array[fs];
             statfs_args[i].path = path;
             statfs_args[i].attr = attr;
             statfs_args[i].copy = copy;
@@ -165,12 +185,13 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         }
         int failedCount=0;
         for(int i = 0; i < total_fs_num; i++){
+            auto fs = fs_list[i];
             if (pthread_join(threads[i], NULL) != 0) {
                 LOG(ERROR, "Error joining thread to GekkoFS ID: '{}'", i);
             }
             if(!statfs_args[i].result) {
-                founds.push_back({i,statfs_args[i].attr});
-                CTX->pathfs()[path] = i;
+                founds.push_back({fs,statfs_args[i].attr});
+                CTX->pathfs()[path] = fs;
                 attr = statfs_args[i].attr;
             } else {
                 failedCount++;

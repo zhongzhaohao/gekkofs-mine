@@ -39,10 +39,10 @@
 #include <daemon/backend/metadata/db.hpp>
 #include <daemon/backend/data/chunk_storage.hpp>
 #include <daemon/ops/metadentry.hpp>
-
+#include <common/bloom_filter.hpp>
 #include <common/rpc/rpc_types.hpp>
 #include <common/statistics/stats.hpp>
-
+#include <iostream>
 using namespace std;
 
 namespace {
@@ -78,6 +78,8 @@ rpc_srv_create(hg_handle_t handle) {
         // create metadentry
         gkfs::metadata::create(in.path, md);
         out.err = 0;
+        std::string path(in.path);
+        GKFS_DATA->Bloom_filter().insert(path);
     } catch(const gkfs::metadata::ExistsException& e) {
         out.err = EEXIST;
     } catch(const std::exception& e) {

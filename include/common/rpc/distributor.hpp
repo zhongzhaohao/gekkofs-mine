@@ -74,6 +74,9 @@ public:
     virtual host_t
     locate_file_metadata(const std::string& path, const int num_copy) const = 0;
 
+    virtual host_t
+    locate_file_metadata_fs(const std::string& path, const int num_copy, const int fs) const = 0;
+
     virtual std::vector<host_t>
     locate_directory_metadata(const std::string& path) const = 0;
 };
@@ -119,6 +122,10 @@ public:
     host_t
     locate_file_metadata(const std::string& path,
                          const int num_copy) const override;
+    
+    host_t
+    locate_file_metadata_fs(const std::string& path,
+                        const int num_copy, const int fs) const override;
 
     std::vector<host_t>
     locate_directory_metadata(const std::string& path) const override;

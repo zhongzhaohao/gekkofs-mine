@@ -42,6 +42,8 @@ DECLARE_MARGO_RPC_HANDLER(rpc_srv_stage)
 
 DECLARE_MARGO_RPC_HANDLER(rpc_srv_stage_metadata)
 
+DECLARE_MARGO_RPC_HANDLER(rpc_srv_get_bloom_filter)
+
 /* visible API for RPC operations */
 
 DECLARE_MARGO_RPC_HANDLER(rpc_srv_get_fs_config)

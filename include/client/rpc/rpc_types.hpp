@@ -238,6 +238,113 @@ struct fs_config {
     };
 };
 
+struct Bloom_filter {
+
+    // forward declarations of public input/output types for this RPC
+    class input;
+
+    class output;
+
+    // traits used so that the engine knows what to do with the RPC
+    using self_type = Bloom_filter;
+    using handle_type = hermes::rpc_handle<self_type>;
+    using input_type = input;
+    using output_type = output;
+    using mercury_input_type = hermes::detail::hg_void_t;
+    using mercury_output_type = rpc_bloom_filter_out_t;
+
+    // RPC public identifier
+    // (N.B: we reuse the same IDs assigned by Margo so that the daemon
+    // understands Hermes RPCs)
+    constexpr static const uint64_t public_id = 907804672;
+
+    // RPC internal Mercury identifier
+    constexpr static const hg_id_t mercury_id = public_id;
+
+    // RPC name
+    constexpr static const auto name = gkfs::rpc::tag::bloom_filter;
+
+    // requires response?
+    constexpr static const auto requires_response = true;
+
+    // Mercury callback to serialize input arguments
+    constexpr static const auto mercury_in_proc_cb =
+            hermes::detail::hg_proc_void_t;
+
+    // Mercury callback to serialize output arguments
+    constexpr static const auto mercury_out_proc_cb =
+            HG_GEN_PROC_NAME(rpc_bloom_filter_out_t);
+
+    class input {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        input() {}
+
+        input(input&& rhs) = default;
+
+        input(const input& other) = default;
+
+        input&
+        operator=(input&& rhs) = default;
+
+        input&
+        operator=(const input& other) = default;
+
+        explicit input(const hermes::detail::hg_void_t& other) {}
+
+        explicit operator hermes::detail::hg_void_t() {
+            return {};
+        }
+    };
+
+    class output {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        output()
+            : m_bloom_filter_str(), m_err(){}
+
+        output(const std::string bloom_filter_str, int32_t err)
+            : m_bloom_filter_str(bloom_filter_str), m_err(err) {}
+
+        output(output&& rhs) = default;
+
+        output(const output& other) = default;
+
+        output&
+        operator=(output&& rhs) = default;
+
+        output&
+        operator=(const output& other) = default;
+
+        explicit output(const rpc_bloom_filter_out_t& out) {
+            m_bloom_filter_str = out.bloom_filter_str;
+            m_err = out.err;
+        }
+
+        int32_t
+        err() const {
+            return m_err;
+        }
+
+        std::string
+        bloom_filter_str() const{
+            return m_bloom_filter_str;
+        }
+
+    private:
+        std::string m_bloom_filter_str;
+        int32_t m_err;
+    };
+};
+
 struct registry_request {
 
     // forward declarations of public input/output types for this RPC

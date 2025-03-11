@@ -300,6 +300,15 @@ init_environment() {
                 EXIT_FAILURE,
                 "Unable to fetch file system configurations from daemon process through RPC.");
     }
+
+    if(CTX->use_registry()) {
+        if(gkfs::rpc::forward_get_bloom_filter()) {
+            exit_error_msg(
+                    EXIT_FAILURE,
+                    "Unable to fetch bloom filter from daemon process through RPC.");
+        }
+    }
+
     // Initialize random number generator and seed for replica selection
     // in case of failure, a new replica will be selected
     if(CTX->get_replicas() > 0) {
