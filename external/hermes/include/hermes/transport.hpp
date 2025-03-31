@@ -32,9 +32,12 @@ enum class transport : std::size_t {
     ofi_verbs,
     ofi_psm2,
     ofi_gni,
-    
-    // UCX plugin 
+
+    // UCX plugin
     ucx_all,
+    ucx_tcp,
+    ucx_rc,
+    ucx_ud,
 
     // special value: MUST ALWAYS BE LAST!
     // (it's used when defining the supported_transports constexpr std::array
@@ -125,11 +128,27 @@ std::array<
             "ofi+gni://fi_addr_gni://"
             ),
 
+    // UCX plugin
     std::make_tuple(
             transport::ucx_all,
-	    "ucx+all://",
-	    "ucx+all://"
-	    ),
+            "ucx+all://",
+            "ucx+all://"
+            ),
+    std::make_tuple(
+            transport::ucx_tcp,
+            "ucx+tcp://",
+            "ucx+tcp://"
+            ),
+    std::make_tuple(
+            transport::ucx_rc,
+            "ucx+rc://",
+            "ucx+rc://"
+            ),
+    std::make_tuple(
+            transport::ucx_ud,
+            "ucx+ud://",
+            "ucx+ud://"
+            )
 };
 
 } // namespace hermes

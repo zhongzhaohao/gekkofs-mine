@@ -36,19 +36,21 @@ class request_descriptor_base {
 
 public:
     request_descriptor_base(uint16_t id,
-                            const hg_id_t hg_id,
+                            hg_id_t hg_id,
+                            const uint32_t provider_id,
                             const char* const name,
                             const bool requires_response,
                             const hg_proc_cb_t in_proc_cb,
                             const hg_proc_cb_t out_proc_cb,
                             const hg_rpc_cb_t handler) :
-        m_id(id),
-        m_mercury_id(hg_id),
-        m_name(name),
-        m_requires_response(requires_response),
-        m_mercury_input_cb(in_proc_cb),
-        m_mercury_output_cb(out_proc_cb),
-        m_handler(handler) {}
+            m_id(id),
+            m_mercury_id(hg_id),
+            m_provider_id(provider_id),
+            m_name(name),
+            m_requires_response(requires_response),
+            m_mercury_input_cb(in_proc_cb),
+            m_mercury_output_cb(out_proc_cb),
+            m_handler(handler) {}
 
     virtual ~request_descriptor_base() = default;
 
@@ -60,7 +62,8 @@ protected:
 
 public:
     const uint16_t m_id;
-    const hg_id_t m_mercury_id;
+    hg_id_t m_mercury_id;
+    const uint32_t m_provider_id;
     const char* const m_name;
     const bool m_requires_response;
     const hg_proc_cb_t m_mercury_input_cb;
@@ -83,7 +86,7 @@ struct request_descriptor : public request_descriptor_base {
     constexpr static const auto public_id = Request::public_id;
 
     // RPC internal Mercury identifier
-    constexpr static const auto mercury_id = public_id;
+    hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = Request::name;
@@ -101,17 +104,19 @@ struct request_descriptor : public request_descriptor_base {
 
 
     request_descriptor(uint16_t id,
-                       const hg_id_t hg_id,
+                       hg_id_t hg_id,
+                       const uint32_t provider_id,
                        const char* const name,
                        const bool requires_response,
                        const hg_proc_cb_t in_proc_cb,
                        hg_proc_cb_t out_proc_cb) :
-        request_descriptor_base(id, 
-                                hg_id, 
-                                name, 
+        request_descriptor_base(id,
+                                hg_id,
+                                provider_id,
+                                name,
                                 requires_response,
-                                in_proc_cb, 
-                                out_proc_cb, 
+                                in_proc_cb,
+                                out_proc_cb,
                                 mercury_handler<request_type>) {}
 
     template <typename Callable>

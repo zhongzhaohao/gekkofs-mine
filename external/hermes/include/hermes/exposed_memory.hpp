@@ -279,7 +279,7 @@ public:
         // we don't need to actually copy it, we can simply increase
         // it's reference count. This also simplifies the destructor.
         if(m_bulk_handle != HG_BULK_NULL) {
-            HG_Bulk_ref_incr(m_bulk_handle);
+      //      HG_Bulk_ref_incr(m_bulk_handle);
         }
 
         return m_bulk_handle;

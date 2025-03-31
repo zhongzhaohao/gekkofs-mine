@@ -28,7 +28,7 @@ public:
 
     template <typename Request>
     bool
-    add() {
+    add(const uint32_t provider_id = 0) {
         constexpr const uint64_t id = Request::public_id;
         constexpr const hg_id_t mercury_id = Request::mercury_id;
         constexpr const auto name = Request::name;
@@ -36,14 +36,14 @@ public:
         constexpr const auto mercury_in_proc_cb = Request::mercury_in_proc_cb;
         constexpr const auto mercury_out_proc_cb = Request::mercury_out_proc_cb;
 
-        HERMES_DEBUG2("Adding new request type (id={}, name={})", id, name);
+        HERMES_DEBUG2("Adding new request type (id={}, mercury_id={} name={})", id, mercury_id, name);
 
         if(m_request_types.count(id) != 0) {
             // if the request type we want to add is identical to the one
             // already registered, just ignore the request
             const auto& r = m_request_types.at(id);
 
-            if(mercury_id == r->m_mercury_id && name == r->m_name &&
+            if(name == r->m_name &&
                requires_response == r->m_requires_response &&
                mercury_in_proc_cb == r->m_mercury_input_cb &&
                mercury_out_proc_cb == r->m_mercury_output_cb) {
@@ -55,8 +55,8 @@ public:
 
         m_request_types.emplace(id,
                 std::make_shared<request_descriptor<Request>>(
-                    id, mercury_id, name, requires_response,
-                    mercury_in_proc_cb, mercury_out_proc_cb));
+                        id, mercury_id, provider_id, name, requires_response,
+                        mercury_in_proc_cb, mercury_out_proc_cb));
 
         return true;
     }
