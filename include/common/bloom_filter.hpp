@@ -171,6 +171,7 @@ protected:
    typedef std::vector<unsigned char> table_type;
 
 public:
+   // Base64编码表（参考网页25、26）
    static constexpr char base64_chars[] = 
                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                   "abcdefghijklmnopqrstuvwxyz"
@@ -197,24 +198,30 @@ public:
       return base64_encode(binary_data.data(), binary_data.size());
    }
 
+   // 反序列化
    void deserialize(const std::string& str) {
       
+      // 步骤1：Base64解码
       std::vector<unsigned char> binary_data = base64_decode(str);
       const unsigned char* ptr = binary_data.data();
       const unsigned char* end = ptr + binary_data.size();
 
+      // 步骤2：二进制反序列化
+      // 反序列化salt_
       uint64_t salt_size = read_binary<uint64_t>(ptr);
       ptr += sizeof(uint64_t);
       salt_.resize(salt_size);
       std::memcpy(salt_.data(), ptr, salt_size * sizeof(bloom_type));
       ptr += salt_size * sizeof(bloom_type);
 
+      // 反序列化bit_table_
       uint64_t bit_table_size = read_binary<uint64_t>(ptr);
       ptr += sizeof(uint64_t);
       bit_table_.resize(bit_table_size);
       std::memcpy(bit_table_.data(), ptr, bit_table_size);
       ptr += bit_table_size;
 
+      // 反序列化标量成员
       salt_count_ = read_binary<unsigned int>(ptr);
       ptr += sizeof(unsigned int);
       table_size_ = read_binary<unsigned long long>(ptr);
@@ -228,6 +235,7 @@ public:
       desired_false_positive_probability_ = read_binary<double>(ptr);
       ptr += sizeof(double);
 
+      // 验证数据完整性
       if (ptr != end) {
          throw std::runtime_error("Invalid deserialization data");
       }

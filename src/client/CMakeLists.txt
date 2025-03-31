@@ -94,7 +94,6 @@ target_link_libraries(
          hermes
          fmt::fmt
          Threads::Threads
-         Date::TZ
 )
 
 install(
@@ -113,7 +112,6 @@ target_link_libraries(
     fmt::fmt
     Threads::Threads
     Syscall_intercept::Syscall_intercept
-    Date::TZ
 )
 
 set_target_properties(gkfs_user_lib
@@ -170,7 +168,6 @@ if(GKFS_ENABLE_FORWARDING)
            hermes
            fmt::fmt
            Threads::Threads
-           Date::TZ
   )
 
   install(

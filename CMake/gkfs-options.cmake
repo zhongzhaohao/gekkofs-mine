@@ -296,7 +296,7 @@ gkfs_define_option(
 gkfs_define_option(
   GKFS_ENABLE_REDIS
   HELP_TEXT "Enable Redis metadata backend"
-  DEFAULT_VALUE ON
+  DEFAULT_VALUE on
   DESCRIPTION "Use Redis key-value store for the metadata backend"
 )
 
@@ -304,7 +304,7 @@ gkfs_define_option(
 gkfs_define_option(
   GKFS_ENABLE_MEMCACHED
   HELP_TEXT "Enable Memcached metadata backend"
-  DEFAULT_VALUE ON
+  DEFAULT_VALUE on
   DESCRIPTION "Use Memcached key-value store for the metadata backend"
 )
 

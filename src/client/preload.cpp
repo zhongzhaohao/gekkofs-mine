@@ -188,6 +188,7 @@ int request_registry(){
         errno = err;
         return -1;
     }
+    std::cout<< "request succeed:"<< std::endl;
     return 0;
 }
 

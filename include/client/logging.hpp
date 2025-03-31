@@ -42,7 +42,6 @@
 #include <optional>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <date/tz.h>
 #include <hermes.hpp>
 
 #ifdef GKFS_DEBUG_BUILD
@@ -180,6 +179,138 @@ log_buffer(int fd, const void* buffer, std::size_t length) {
 }
 
 /**
+ * @brief convert a time_t to a tm
+ * It is not POSIX compliant, but it dows not uses any syscall or timezone
+ * Converts a Unix timestamp (number of seconds since the beginning of 1970
+ * CE) to a Gregorian civil date-time tuple in GMT (UTC) time zone.
+ *
+ * This conforms to C89 (and C99...) and POSIX.
+ *
+ * This implementation works, and doesn't overflow for any sizeof(time_t).
+ * It doesn't check for overflow/underflow in tm->tm_year output. Other than
+ * that, it never overflows or underflows. It assumes that that time_t is
+ * signed.
+ *
+ * This implements the inverse of the POSIX formula
+ * (http://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_15)
+ * for all time_t values, no matter the size, as long as tm->tm_year doesn't
+ * overflow or underflow. The formula is: tm_sec + tm_min*60 + tm_hour*3600
+ * + tm_yday*86400 + (tm_year-70)*31536000 + ((tm_year-69)/4)*86400 -
+ * ((tm_year-1)/100)*86400 + ((tm_year+299)/400)*86400.
+ *
+ * License : GNU General Public License v2.0 from
+ * https://github.com/pts/minilibc686/
+ * @param time_t
+ * @return tm
+ */
+
+static inline struct tm*
+mini_gmtime_r(const time_t* timep, struct tm* tm) {
+    const time_t ts = *timep;
+    time_t t = ts / 86400;
+    unsigned hms =
+            ts %
+            86400; /* -86399 <= hms <= 86399. This needs sizeof(int) >= 4. */
+    time_t c, f;
+    unsigned yday; /* 0 <= yday <= 426. Also fits to an `unsigned short', but
+                      `int' is faster. */
+    unsigned a; /* 0 <= a <= 2133. Also fits to an `unsigned short', but `int'
+                   is faster. */
+    if((int) hms < 0) {
+        --t;
+        hms += 86400;
+    } /* Fix quotient and negative remainder if ts was negative (i.e. before
+         year 1970 CE). */
+    /* Now: -24856 <= t <= 24855. */
+    tm->tm_sec = hms % 60;
+    hms /= 60;
+    tm->tm_min = hms % 60;
+    tm->tm_hour = hms / 60;
+    if(sizeof(time_t) >
+       4) { /* Optimization. For int32_t, this would keep t intact, so we won't
+               have to do it. This produces unreachable code. */
+        f = (t + 4) % 7;
+        if(f < 0)
+            f += 7; /* Fix negative remainder if (t + 4) was negative. */
+        /* Now 0 <= f <= 6. */
+        tm->tm_wday = f;
+        c = (t << 2) + 102032;
+        f = c / 146097;
+        if(c % 146097 < 0)
+            --f; /* Fix negative remainder if c was negative. */
+        --f;
+        t += f;
+        f >>= 2;
+        t -= f;
+        f = (t << 2) + 102035;
+        c = f / 1461;
+        if(f % 1461 < 0)
+            --c; /* Fix negative remainder if f was negative. */
+    } else {
+        tm->tm_wday = (t + 24861) % 7; /* t + 24861 >= 0. */
+        /* Now: -24856 <= t <= 24855. */
+        c = ((t << 2) + 102035) / 1461;
+    }
+    yday = t - 365 * c - (c >> 2) + 25568;
+    /* Now: 0 <= yday <= 425. */
+    a = yday * 5 + 8;
+    /* Now: 8 <= a <= 2133. */
+    tm->tm_mon = a / 153;
+    a %= 153; /* No need to fix if a < 0, because a cannot be negative here. */
+    /* Now: 2 <= tm->tm_mon <= 13. */
+    /* Now: 0 <= a <= 152. */
+    tm->tm_mday = 1 + a / 5; /* No need to fix if a < 0, because a cannot be
+                                negative here. */
+    /* Now: 1 <= tm->tm_mday <= 31. */
+    if(tm->tm_mon >= 12) {
+        tm->tm_mon -= 12;
+        /* Now: 0 <= tm->tm_mon <= 1. */
+        ++c;
+        yday -= 366;
+    } else { /* Check for leap year (in c). */
+        /* Now: 2 <= tm->tm_mon <= 11. */
+        /* 1903: not leap; 1904: leap, 1900: not leap; 2000: leap */
+        /* With sizeof(time_t) == 4, we have 1901 <= year <= 2038; of these
+         * years only 2000 is divisble by 100, and that's a leap year, no we
+         * optimize the check to `(c & 3) == 0' only.
+         */
+        if(!((c & 3) == 0 &&
+             (sizeof(time_t) <= 4 || c % 100 != 0 || (c + 300) % 400 == 0)))
+            --yday; /* These `== 0' comparisons work even if c < 0. */
+    }
+    tm->tm_year =
+            c; /* This assignment may overflow or underflow, we don't check it.
+                  Example: time_t is a huge int64_t, tm->tm_year is int32_t. */
+    /* Now: 0 <= tm->tm_mon <= 11. */
+    /* Now: 0 <= yday <= 365. */
+    tm->tm_yday = yday;
+    tm->tm_isdst = 0;
+    return tm;
+}
+
+static inline struct tm*
+mini_gmtime(const time_t* timep) {
+    static struct tm tm;
+    return mini_gmtime_r(timep, &tm);
+}
+
+static inline ssize_t
+format_timeval(struct timeval* tv, char* buf, size_t sz) {
+    ssize_t written = -1;
+    struct tm* gm = mini_gmtime(&tv->tv_sec);
+
+
+    written = (ssize_t) strftime(buf, sz, "%Y-%m-%d %H:%M:%S", gm);
+    if((written > 0) && ((size_t) written < sz)) {
+        int w = snprintf(buf + written, sz - (size_t) written, ".%06ld",
+                         tv->tv_usec);
+        written = (w > 0) ? written + w : -1;
+    }
+
+    return written;
+}
+
+/**
  * format_timestamp_to - safely format a timestamp for logging messages
  *
  * This function produes a timestamp that can be used to prefix logging
@@ -196,13 +327,10 @@ log_buffer(int fd, const void* buffer, std::size_t length) {
  * one thread exactly, and we pass it as an argument whenever we need to
  * format a timestamp. If no timezone is provided, we just format the epoch.
  *
- * NOTE: we use the date C++ library to query the timezone database and
- * to format the timestamps.
  */
 template <typename Buffer>
 static inline void
-format_timestamp_to(Buffer&& buffer,
-                    const date::time_zone* const timezone = nullptr) {
+format_timestamp_to(Buffer&& buffer) {
 
     struct ::timeval tv;
 
@@ -212,17 +340,11 @@ format_timestamp_to(Buffer&& buffer,
         return;
     }
 
-    date::sys_time<std::chrono::microseconds> now{
-            std::chrono::seconds{tv.tv_sec} +
-            std::chrono::microseconds{tv.tv_usec}};
+    char buf[28];
 
-    if(!timezone) {
-        fmt::format_to(buffer, "[{}] ", now.time_since_epoch().count());
-        return;
+    if(format_timeval(&tv, buf, sizeof(buf)) > 0) {
+        fmt::format_to(std::back_inserter(buffer), "[{}] ", buf);
     }
-
-    fmt::format_to(buffer, "[{}] ",
-                   date::zoned_time<std::chrono::microseconds>{timezone, now});
 }
 
 template <typename Buffer>
@@ -230,7 +352,7 @@ static inline void
 format_syscall_info_to(Buffer&& buffer, gkfs::syscall::info info) {
 
     const auto ttid = syscall_no_intercept(SYS_gettid);
-    fmt::format_to(buffer, "[{}] [syscall] ", ttid);
+    fmt::format_to(std::back_inserter(buffer), "[{}] [syscall] ", ttid);
 
     char o;
     char t;
@@ -260,20 +382,15 @@ format_syscall_info_to(Buffer&& buffer, gkfs::syscall::info info) {
     }
 
     const std::array<char, 5> tmp = {'[', o, t, ']', ' '};
-    fmt::format_to(buffer, fmt::string_view(tmp.data(), tmp.size()));
+    fmt::format_to(std::back_inserter(buffer),
+                   fmt::string_view(tmp.data(), tmp.size()));
 }
 
 } // namespace detail
 
 enum { max_buffer_size = LIBGKFS_LOG_MESSAGE_SIZE };
 
-struct static_buffer : public fmt::basic_memory_buffer<char, max_buffer_size> {
-
-protected:
-    void
-    grow(std::size_t size) override final;
-};
-
+using static_buffer = fmt::basic_memory_buffer<char, max_buffer_size>;
 
 struct logger {
 
@@ -297,16 +414,17 @@ struct logger {
         }
 
         static_buffer buffer;
-        detail::format_timestamp_to(buffer, timezone_);
-        fmt::format_to(buffer, "[{}] [{}] ", log_process_id_,
-                       lookup_level_name(level));
+        detail::format_timestamp_to(buffer);
+        fmt::format_to(std::back_inserter(buffer), "[{}] [{}] ",
+                       log_process_id_, lookup_level_name(level));
 
         if(!!(level & log::debug)) {
-            fmt::format_to(buffer, "<{}():{}> ", func, lineno);
+            fmt::format_to(std::back_inserter(buffer), "<{}():{}> ", func,
+                           lineno);
         }
 
-        fmt::format_to(buffer, std::forward<Args>(args)...);
-        fmt::format_to(buffer, "\n");
+        fmt::format_to(std::back_inserter(buffer), std::forward<Args>(args)...);
+        fmt::format_to(std::back_inserter(buffer), "\n");
         detail::log_buffer(log_fd_, buffer);
     }
 
@@ -341,8 +459,8 @@ struct logger {
 
         static_buffer prefix;
         detail::format_timestamp_to(prefix);
-        fmt::format_to(prefix, "[{}] [{}] ", log_process_id_,
-                       lookup_level_name(level));
+        fmt::format_to(std::back_inserter(prefix), "[{}] [{}] ",
+                       log_process_id_, lookup_level_name(level));
 
         char buffer[max_buffer_size];
         const int n = vsnprintf(buffer, sizeof(buffer), fmt, ap);
@@ -391,8 +509,8 @@ struct logger {
         }
 
         static_buffer buffer;
-        fmt::format_to(buffer, std::forward<Args>(args)...);
-        fmt::format_to(buffer, "\n");
+        fmt::format_to(std::back_inserter(buffer), std::forward<Args>(args)...);
+        fmt::format_to(std::back_inserter(buffer), "\n");
         detail::log_buffer(fd, buffer);
     }
 
@@ -414,8 +532,6 @@ struct logger {
     std::bitset<512> filtered_syscalls_;
     int debug_verbosity_;
 #endif
-
-    const date::time_zone* timezone_;
 };
 
 // the following static functions can be used to interact
@@ -442,23 +558,6 @@ get_global_logger() {
 static inline void
 destroy_global_logger() {
     logger::global_logger().reset();
-}
-
-inline void
-static_buffer::grow(std::size_t size) {
-
-    const auto logger = get_global_logger();
-
-    if(logger) {
-        logger->log_mask_ &= ~(syscall | syscall_at_entry);
-    }
-
-    std::fprintf(
-            stderr,
-            "FATAL: message too long for gkfs::log::static_buffer, increase the size of\n"
-            "LIBGKFS_LOG_MESSAGE_SIZE in CMake or reduce the length of the offending "
-            "message.\n");
-    abort();
 }
 
 } // namespace gkfs::log

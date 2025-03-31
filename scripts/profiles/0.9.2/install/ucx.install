@@ -48,7 +48,7 @@ pkg_install() {
     ID="ucx"
     CURR="${SOURCE_DIR}/${ID}"
     cd $CURR 
-    ./configure --disable-assertions --disable-params-check --prefix=${INSTALL_DIR} --with-glex=/usr/local/glex --without-pmix --without-verbs --without-rdmacm --without-valgrind --enable-cma --enable-mt --no-create --no-recursion --enable-debug
+    ./configure --without-go --without-java --disable-assertions --disable-params-check --prefix=${INSTALL_DIR} --with-glex=/usr/local/glex --without-pmix --without-verbs --without-rdmacm --without-valgrind --enable-cma --enable-mt --no-create --no-recursion --enable-debug
     make CFLAGS=-Wno-error -j"${CORES}"
     make install
 }

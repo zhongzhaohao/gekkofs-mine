@@ -51,7 +51,7 @@ forward_stage_metadata(const std::string& path,const mode_t mode, const size_t s
     try {
         LOG(DEBUG, "Staging is processing file metadata.");
 
-        out = ld_network_service->post<gkfs::rpc::stage_metadata>(endp,in).get(1200).at(0);
+        out = ld_network_service->post<gkfs::rpc::stage_metadata>(endp,in).get().at(0);
         
         LOG(DEBUG, "Got response success: {}", out.err());
         if(out.err())

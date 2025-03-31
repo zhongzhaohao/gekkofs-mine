@@ -160,10 +160,6 @@ find_package(Margo 0.9.6 REQUIRED)
 message(STATUS "[${PROJECT_NAME}] Checking for syscall_intercept")
 find_package(Syscall_intercept REQUIRED)
 
-### Date (required by the libgkfs_intercept.so)
-message(STATUS "[${PROJECT_NAME}] Checking for Date")
-find_package(Date REQUIRED)
-
 ### AGIOS: required for scheduling I/O requests
 if (GKFS_ENABLE_AGIOS)
     message(STATUS "[${PROJECT_NAME}] Checking for Agios")

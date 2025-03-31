@@ -34,10 +34,11 @@
 
 #include <common/path_util.hpp>
 
+#include <stack>
+#include <utility>
 #include <vector>
 #include <string>
 #include <cassert>
-#include <climits>
 
 #ifndef BYPASS_SYSCALL
 #include <libsyscall_intercept_hook_point.h>
@@ -98,6 +99,107 @@ match_components(const string& path, unsigned int& path_components,
     }
     path_components = processed_components;
     return matched;
+}
+
+string
+follow_symlinks(const string& path) {
+    struct stat st{};
+    if(lstat(path.c_str(), &st) < 0) {
+        LOG(DEBUG, "path \"{}\" does not exist", path);
+        return path;
+    }
+    if(S_ISLNK(st.st_mode)) {
+        auto link_resolved = ::unique_ptr<char[]>(new char[PATH_MAX]);
+        if(realpath(path.c_str(), link_resolved.get()) == nullptr) {
+
+            LOG(ERROR,
+                "Failed to get realpath for link \"{}\". "
+                "Error: {}",
+                path, ::strerror(errno));
+            return path;
+        }
+        // substituute resolved with new link path
+        return link_resolved.get();
+    }
+    return path;
+}
+
+pair<bool, string>
+resolve(const string& path, bool resolve_last_link) {
+#ifdef GKFS_USE_LEGACY_PATH_RESOLVE
+    string resolved;
+    bool is_in_path = resolve(path, resolved, resolve_last_link);
+    return make_pair(is_in_path, resolved);
+#else
+    return resolve_new(path, resolve_last_link);
+#endif
+}
+
+pair<bool, string>
+resolve_new(const string& path, bool resolve_last_link) {
+    LOG(DEBUG, "path: \"{}\", mountdir: \"{}\"", path, CTX->mountdir());
+
+    if(path.empty()) {
+        return make_pair(false, "/");
+    }
+
+    string resolved = "";
+    stack<size_t> last_component_pos;
+    const string absolute_path = (path.at(0) == path::separator)
+                                         ? path
+                                         : CTX->cwd() + path::separator + path;
+
+    for(size_t start = 0; start < absolute_path.size(); start++) {
+        size_t end = absolute_path.find(path::separator, start);
+        // catches the case without separator at the end
+        if(end == string::npos) {
+            end = absolute_path.size();
+        }
+        size_t comp_size = end - start;
+        if(comp_size == 0 && absolute_path.at(start) == path::separator) {
+            continue;
+        }
+        if(comp_size == 1 && absolute_path.at(start) == '.') {
+            // component is '.', we skip it
+            continue;
+        }
+        if(comp_size == 2 && absolute_path.at(start) == '.' &&
+           absolute_path.at(start + 1) == '.') {
+            // component is '..', we skip it
+            LOG(DEBUG, "path: \"{}\", mountdir: \"{}\"", absolute_path,
+                CTX->mountdir());
+            if(last_component_pos.empty()) {
+                resolved = "";
+            } else {
+                resolved.erase(last_component_pos.top());
+                last_component_pos.pop();
+            }
+            continue;
+        }
+        // add `/<component>` to the reresolved path
+        resolved.push_back(path::separator);
+        last_component_pos.push(resolved.size() - 1);
+        resolved.append(absolute_path, start, comp_size);
+        start = end;
+
+#ifdef GKFS_FOLLOW_EXTERNAL_SYMLINKS
+        if(resolve_last_link) {
+            resolved = follow_symlinks(resolved);
+        }
+#endif
+    }
+
+    if(resolved.substr(0, CTX->mountdir().size()) == CTX->mountdir()) {
+        resolved.erase(1, CTX->mountdir().size());
+        LOG(DEBUG, "internal: \"{}\"", resolved);
+        return make_pair(true, resolved);
+    }
+
+    if(resolved.empty()) {
+        resolved.push_back(path::separator);
+    }
+    LOG(DEBUG, "external: \"{}\"", resolved);
+    return make_pair(false, resolved);
 }
 
 /** Resolve path to its canonical representation

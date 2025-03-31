@@ -110,7 +110,7 @@ rpc_srv_write(hg_handle_t handle) {
         return gkfs::rpc::cleanup_respond(&handle, &in, &out, &bulk_handle);
     }
     auto hgi = margo_get_info(handle);
-    auto mid = margo_hg_info_get_instance(hgi);
+    auto mid = margo_hg_handle_get_instance(handle);
     auto bulk_size = margo_bulk_get_size(in.bulk_handle);
     GKFS_DATA->spdlogger()->debug(
             "{}() path: '{}' chunk_start '{}' chunk_end '{}' chunk_n '{}' total_chunk_size '{}' bulk_size: '{}' offset: '{}'",
@@ -441,7 +441,7 @@ rpc_srv_read(hg_handle_t handle) {
         return gkfs::rpc::cleanup_respond(&handle, &in, &out, &bulk_handle);
     }
     auto hgi = margo_get_info(handle);
-    auto mid = margo_hg_info_get_instance(hgi);
+    auto mid = margo_hg_handle_get_instance(handle);
     auto bulk_size = margo_bulk_get_size(in.bulk_handle);
 
     GKFS_DATA->spdlogger()->debug(

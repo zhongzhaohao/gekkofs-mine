@@ -36,7 +36,16 @@ unsigned int
 match_components(const std::string& path, unsigned int& path_components,
                  const std::vector<std::string>& components);
 
-bool
+/// @resolve_last_link is used only for the old implementation:
+/// GKFS_USE_LEGACY_PATH_RESOLVE
+std::pair<bool, std::string>
+resolve(const std::string& path, bool resolve_last_link = true);
+
+std::pair<bool, std::string>
+resolve_new(const std::string& path, bool resolve_last_link = true);
+
+[[deprecated(
+        "Use GKFS_USE_LEGACY_PATH_RESOLVE to use old implementation")]] bool
 resolve(const std::string& path, std::string& resolved,
         bool resolve_last_link = true);
 

@@ -79,8 +79,6 @@ int main(int argc, char** argv)
         return (-1);
     }
 
-    margo_diag_start(mid);
-    margo_profile_start(mid);
 
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);

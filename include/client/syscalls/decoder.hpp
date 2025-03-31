@@ -60,19 +60,20 @@ decode(FmtBuffer& buffer, const long syscall_number,
 
     const auto sc = lookup_by_number(syscall_number, argv);
 
-    fmt::format_to(buffer, "{}(", sc.name());
+    fmt::format_to(std::back_inserter(buffer), "{} {}(", sc.name(),
+                   syscall_number);
 
     for(int i = 0; i < sc.num_args(); ++i) {
-        const auto& arg = sc.args().at(i);
+        const auto arg = sc.args().at(i);
 
         arg.formatter<FmtBuffer>()(buffer, {arg.name(), argv[i]});
 
         if(i < sc.num_args() - 1) {
-            fmt::format_to(buffer, ", ");
+            fmt::format_to(std::back_inserter(buffer), ", ");
         }
     }
 
-    fmt::format_to(buffer, ") = ?");
+    fmt::format_to(std::back_inserter(buffer), ") = ?");
 }
 
 template <typename FmtBuffer>
@@ -84,30 +85,31 @@ decode(FmtBuffer& buffer, const long syscall_number, const long argv[MAX_ARGS],
 
     const auto sc = lookup_by_number(syscall_number, argv);
 
-    fmt::format_to(buffer, "{}(", sc.name());
+    fmt::format_to(std::back_inserter(buffer), "{}(", sc.name());
 
     for(int i = 0; i < sc.num_args(); ++i) {
-        const auto& arg = sc.args().at(i);
+        const auto arg = sc.args().at(i);
 
         arg.formatter<FmtBuffer>()(buffer, {arg.name(), argv[i]});
 
         if(i < sc.num_args() - 1) {
-            fmt::format_to(buffer, ", ");
+            fmt::format_to(std::back_inserter(buffer), ", ");
         }
     }
 
     if(never_returns(syscall_number)) {
-        fmt::format_to(buffer, ") = ?");
+        fmt::format_to(std::back_inserter(buffer), ") = ?");
         return;
     }
 
     if(error_code(result) != 0) {
-        fmt::format_to(buffer, ") = {} {} ({})", static_cast<int>(-1),
-                       errno_name(-result), errno_message(-result));
+        fmt::format_to(std::back_inserter(buffer), ") = {} {} ({})",
+                       static_cast<int>(-1), errno_name(-result),
+                       errno_message(-result));
         return;
     }
 
-    fmt::format_to(buffer, ") = ");
+    fmt::format_to(std::back_inserter(buffer), ") = ");
     const auto& ret = sc.return_type();
     ret.formatter<FmtBuffer>()(buffer, result);
 }

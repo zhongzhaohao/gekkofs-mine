@@ -32,11 +32,7 @@
 #include <client/make_array.hpp>
 #include <regex>
 #include <filesystem>
-
-extern "C" {
-#include <date/tz.h>
-#include <fmt/ostream.h>
-}
+#include <ctime>
 
 #ifdef GKFS_ENABLE_LOGGING
 
@@ -289,8 +285,7 @@ logger::logger(const std::string& opts, const std::string& path,
                ,
                const std::string& filter, int verbosity
 #endif
-               )
-    : timezone_(nullptr) {
+) {
 
     /* use stderr by default */
     log_fd_ = 2;
@@ -333,34 +328,6 @@ logger::logger(const std::string& opts, const std::string& path,
         }
 
         log_fd_ = fd;
-    }
-
-    // Finding the current timezone implies accessing OS files (i.e. syscalls),
-    // but current_zone() doesn't actually retrieve the time zone but rather
-    // provides a descriptor to it that is **atomically initialized** upon its
-    // first use. Thus, if we don't force the initialization here, logging the
-    // first intercepted syscall will produce a call to date::time_zone::init()
-    // (under std::call_once) which internally ends up calling fopen(). Since
-    // fopen() ends up calling sys_open(), we will need to generate another
-    // timestamp for a system call log entry, which will attempt to call
-    // date::time_zone::init() since the prior initialization (under the same
-    // std::call_once) has not yet completed.
-    //
-    // Unfortunately, date::time_zone doesn't provide a function to prevent
-    // this lazy initialization, therefore we force it by requesting
-    // information from an arbitrary timepoint (January 1st 1970) which forces
-    // the initialization. This doesn't do any actual work and could safely be
-    // removed if the date API ends up providing this functionality.
-    try {
-        timezone_ = date::current_zone();
-#ifdef GKFS_DEBUG_BUILD
-        using namespace date;
-        timezone_->get_info(date::sys_days{January / 1 / 1970});
-#endif // GKFS_DEBUG_BUILD
-    } catch(const std::exception& ex) {
-        // if timezone initialization fails, setting timezone_ to nullptr
-        // makes format_timestamp_to() default to producing epoch timestamps
-        timezone_ = nullptr;
     }
 
 #ifdef GKFS_ENABLE_LOGGING
@@ -490,9 +457,9 @@ logger::log_syscall(syscall::info info, const long syscall_number,
 
 print_syscall:
 
-    static_buffer buffer;
+    fmt::basic_memory_buffer<char, max_buffer_size> buffer;
 
-    detail::format_timestamp_to(buffer, timezone_);
+    detail::format_timestamp_to(buffer);
     detail::format_syscall_info_to(buffer, info);
 
     if(result) {
@@ -501,7 +468,7 @@ print_syscall:
         syscall::decode(buffer, syscall_number, args);
     }
 
-    fmt::format_to(buffer, "\n");
+    fmt::format_to(std::back_inserter(buffer), "\n");
 
     ::syscall_no_intercept(SYS_write, log_fd_, buffer.data(), buffer.size());
 }

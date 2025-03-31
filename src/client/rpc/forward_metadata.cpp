@@ -37,7 +37,6 @@
 #include <common/rpc/rpc_util.hpp>
 #include <common/rpc/distributor.hpp>
 #include <common/rpc/rpc_types.hpp>
-
 using namespace std;
 
 namespace gkfs::rpc {
@@ -73,7 +72,6 @@ forward_create(const std::string& path, const mode_t mode, const int copy) {
 
     auto id = CTX->distributor()->locate_file_metadata(path, copy);
     auto endp = CTX->hosts().at(id);
-
     try {
         LOG(DEBUG, "Sending RPC ...");
         // TODO(amiranda): add a post() with RPC_TIMEOUT to hermes so that we
@@ -89,7 +87,7 @@ forward_create(const std::string& path, const mode_t mode, const int copy) {
             return out.err();
         }
         if(CTX->use_registry())
-            CTX->bloom_filter_vec().at(id).insert(path);
+           CTX->bloom_filter_vec().at(id).insert(path);
         return 0;
     } catch(const std::exception& ex) {
         LOG(ERROR, "while getting rpc output");
@@ -125,7 +123,7 @@ forward_getSuccessResponseThread(void* data){
             LOG(ERROR, "while getting rpc output");
             statfs_args->err = EBUSY;
         }
-   pthread_exit(NULL);
+    pthread_exit(NULL);
 
 }
 
@@ -163,7 +161,7 @@ forward_stat(const std::string& path, string& attr, const int copy) {
             }
             if (fs_list.size() == 0){
                 fs_list.push_back(CTX->local_fs_id());
-             }
+            }
         } else {
             fs_list.push_back(CTX->pathfs()[path]);
         }
@@ -172,7 +170,6 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         pthread_t threads[total_fs_num];
         forward_stat_fs_args statfs_args[total_fs_num];
         vector<pair<unsigned int, string>> founds;
-
         for(int i = 0; i < total_fs_num; i++){
             auto fs = fs_list[i];
             statfs_args[i].fsId = fs;
@@ -208,6 +205,7 @@ forward_stat(const std::string& path, string& attr, const int copy) {
                 attr = find.second;
             }
         }
+        
     /* --Multiple GekkoFS--*/
     } else {
         auto endp = CTX->hosts().at(

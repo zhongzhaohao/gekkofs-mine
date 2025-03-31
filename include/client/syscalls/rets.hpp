@@ -121,7 +121,7 @@ template <typename FmtBuffer>
 inline void
 format_none_ret_to(FmtBuffer& buffer,
                    long val) {
-    fmt::format_to(buffer, "void");
+    fmt::format_to(std::back_inserter(buffer), "void");
 }
 
 template <typename FmtBuffer>
@@ -129,18 +129,18 @@ inline void
 format_ptr_ret_to(FmtBuffer& buffer,
                   long val) {
     if(LIKELY(reinterpret_cast<const void*>(val) != nullptr)) {
-        fmt::format_to(buffer, "{}", reinterpret_cast<const void*>(val));
+        fmt::format_to(std::back_inserter(buffer), "{}", reinterpret_cast<const void*>(val));
         return;
     }
 
-    fmt::format_to(buffer, "NULL");
+    fmt::format_to(std::back_inserter(buffer), "NULL");
 }
 
 template <typename FmtBuffer>
 inline void
 format_dec_ret_to(FmtBuffer& buffer,
                   long val) {
-    fmt::format_to(buffer, "{}", val);
+    fmt::format_to(std::back_inserter(buffer), "{}", val);
 }
 
 #undef LIKELY

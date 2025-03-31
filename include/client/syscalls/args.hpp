@@ -228,7 +228,7 @@ format_flag(FmtBuffer& buffer, long flag, FlagDescriptorArray&& desc) {
     // we assume that if a flag value is zero, its printable
     // name will always be at position 0 in the array
     if(flag == 0 && desc[0].flag_ == 0) {
-        fmt::format_to(buffer, "{}", desc[0].name_);
+        fmt::format_to(std::back_inserter(buffer), "{}", desc[0].name_);
         return;
     }
 
@@ -239,12 +239,12 @@ format_flag(FmtBuffer& buffer, long flag, FlagDescriptorArray&& desc) {
         }
 
         if((flag == desc[i].flag_)) {
-            fmt::format_to(buffer, "{}", desc[i].name_);
+            fmt::format_to(std::back_inserter(buffer), "{}", desc[i].name_);
             return;
         }
     }
 
-    fmt::format_to(buffer, "{:#x}", flag);
+    fmt::format_to(std::back_inserter(buffer), "{:#x}", flag);
 }
 
 template <typename FmtBuffer, typename FlagDescriptorArray>
@@ -254,7 +254,7 @@ format_flag_set(FmtBuffer& buffer, long flags, FlagDescriptorArray&& desc) {
     // we assume that if a flag value is zero, its printable
     // name will always be at position 0 in the array
     if(flags == 0 && desc[0].flag_ == 0) {
-        fmt::format_to(buffer, "{}", desc[0].name_);
+        fmt::format_to(std::back_inserter(buffer), "{}", desc[0].name_);
         return;
     }
 
@@ -269,7 +269,7 @@ format_flag_set(FmtBuffer& buffer, long flags, FlagDescriptorArray&& desc) {
         }
 
         if((flags & desc[i].flag_) != 0) {
-            fmt::format_to(buffer, "{}{}",
+            fmt::format_to(std::back_inserter(buffer), "{}{}",
                            buffer.size() != buffer_start ? "|" : "",
                            desc[i].name_);
             flags &= ~desc[i].flag_;
@@ -280,15 +280,15 @@ format_flag_set(FmtBuffer& buffer, long flags, FlagDescriptorArray&& desc) {
 
     if(flags != 0) {
         if(buffer.size() != buffer_start) {
-            fmt::format_to(buffer, "|");
+            fmt::format_to(std::back_inserter(buffer), "|");
         }
 
-        fmt::format_to(buffer, "{:#x}", flags);
+        fmt::format_to(std::back_inserter(buffer), "{:#x}", flags);
         return;
     }
 
     if(buffer_start == buffer.size()) {
-        fmt::format_to(buffer, "0x0");
+        fmt::format_to(std::back_inserter(buffer), "0x0");
     }
 }
 
@@ -311,7 +311,7 @@ format_whence_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
             FLAG_ENTRY(SEEK_END)
         );
 
-    fmt::format_to(buffer, "{}=", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=", parg.name);
     format_flag_set(buffer, parg.value, flag_names);
 }
 
@@ -334,7 +334,7 @@ format_mmap_prot_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
             FLAG_ENTRY(PROT_WRITE),
             FLAG_ENTRY(PROT_EXEC));
 
-    fmt::format_to(buffer, "{}=", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=", parg.name);
     format_flag_set(buffer, parg.value, flag_names);
 
     return;
@@ -376,7 +376,7 @@ format_mmap_flags_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 #endif
             );
 
-    fmt::format_to(buffer, "{}=", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=", parg.name);
     format_flag_set(buffer, parg.value, flag_names);
     return;
 }
@@ -420,14 +420,14 @@ format_clone_flags_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
             FLAG_ENTRY(CLONE_NEWNET),
             FLAG_ENTRY(CLONE_IO));
 
-    fmt::format_to(buffer, "{}=", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=", parg.name);
 
     // the low byte in clone flags contains the number of the termination
     // signal sent to the parent when the child dies
     format_flag_set(buffer, parg.value & ~0x11l, flag_names);
 
     if((parg.value & 0x11l) != 0) {
-        fmt::format_to(buffer, "|", parg.name);
+        fmt::format_to(std::back_inserter(buffer), "|", parg.name);
         format_signum_arg_to(buffer, {"", parg.value & 0x11l});
     }
     return;
@@ -479,7 +479,7 @@ format_signum_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
             FLAG_ENTRY(SIGSYS));
 
     if(std::strcmp(parg.name, "")) {
-        fmt::format_to(buffer, "{}=", parg.name);
+        fmt::format_to(std::back_inserter(buffer), "{}=", parg.name);
     }
 
     format_flag(buffer, parg.value, flag_names);
@@ -504,7 +504,7 @@ format_sigproc_how_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
             FLAG_ENTRY(SIG_UNBLOCK),
             FLAG_ENTRY(SIG_SETMASK));
 
-    fmt::format_to(buffer, "{}=", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=", parg.name);
     format_flag(buffer, parg.value, flag_names);
     return;
 }
@@ -518,7 +518,7 @@ format_sigproc_how_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 template <typename FmtBuffer>
 inline void
 format_none_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
-    fmt::format_to(buffer, "void");
+    fmt::format_to(std::back_inserter(buffer), "void");
 }
 
 
@@ -531,7 +531,7 @@ format_none_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 template <typename FmtBuffer>
 inline void
 format_fd_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
-    fmt::format_to(buffer, "{}={}", parg.name, static_cast<int>(parg.value));
+    fmt::format_to(std::back_inserter(buffer), "{}={}", parg.name, static_cast<int>(parg.value));
 }
 
 
@@ -546,11 +546,11 @@ inline void
 format_atfd_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 
     if(static_cast<int>(parg.value) == AT_FDCWD) {
-        fmt::format_to(buffer, "{}=AT_FDCWD", parg.name);
+        fmt::format_to(std::back_inserter(buffer), "{}=AT_FDCWD", parg.name);
         return;
     }
 
-    fmt::format_to(buffer, "{}={}", parg.name, static_cast<int>(parg.value));
+    fmt::format_to(std::back_inserter(buffer), "{}={}", parg.name, static_cast<int>(parg.value));
 }
 
 
@@ -565,12 +565,12 @@ inline void
 format_cstr_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 
     if(LIKELY(reinterpret_cast<const char*>(parg.value) != nullptr)) {
-        fmt::format_to(buffer, "{}=\"{}\"", parg.name,
+        fmt::format_to(std::back_inserter(buffer), "{}=\"{}\"", parg.name,
                        reinterpret_cast<const char*>(parg.value));
         return;
     }
 
-    fmt::format_to(buffer, "{}=NULL", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=NULL", parg.name);
 }
 
 /** 
@@ -618,7 +618,7 @@ format_open_flags_to(FmtBuffer& buffer,
 
     long flags = parg.value;
 
-    fmt::format_to(buffer, "{}=", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=", parg.name);
     format_flag(buffer, flags & O_ACCMODE, flag_names);
 
     flags &= ~O_ACCMODE;
@@ -636,7 +636,7 @@ format_open_flags_to(FmtBuffer& buffer,
 #endif // !O_TMPFILE
 
     if(flags != 0) {
-        fmt::format_to(buffer, "|", parg.name);
+        fmt::format_to(std::back_inserter(buffer), "|", parg.name);
         format_flag_set(buffer, flags, extra_flag_names);
     }
 }
@@ -650,7 +650,7 @@ format_open_flags_to(FmtBuffer& buffer,
 template <typename FmtBuffer>
 inline void
 format_octal_mode_to(FmtBuffer& buffer, const printable_arg& parg) {
-    fmt::format_to(buffer, "{}={:#04o}", parg.name, parg.value);
+    fmt::format_to(std::back_inserter(buffer), "{}={:#04o}", parg.name, parg.value);
 }
 
 /**
@@ -664,12 +664,12 @@ inline void
 format_ptr_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 
     if(LIKELY(reinterpret_cast<const void*>(parg.value) != nullptr)) {
-        fmt::format_to(buffer, "{}={}", parg.name,
+        fmt::format_to(std::back_inserter(buffer), "{}={}", parg.name,
                        reinterpret_cast<const void*>(parg.value));
         return;
     }
 
-    fmt::format_to(buffer, "{}=NULL", parg.name);
+    fmt::format_to(std::back_inserter(buffer), "{}=NULL", parg.name);
 }
 
 
@@ -682,7 +682,7 @@ format_ptr_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 template <typename FmtBuffer>
 inline void
 format_dec_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
-    fmt::format_to(buffer, "{}={}", parg.name, parg.value);
+    fmt::format_to(std::back_inserter(buffer), "{}={}", parg.name, parg.value);
 }
 
 
@@ -695,7 +695,7 @@ format_dec_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 template <typename FmtBuffer>
 inline void
 format_dec32_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
-    fmt::format_to(buffer, "{}={}", parg.name, static_cast<int>(parg.value));
+    fmt::format_to(std::back_inserter(buffer), "{}={}", parg.name, static_cast<int>(parg.value));
 }
 
 
@@ -708,7 +708,7 @@ format_dec32_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
 template <typename FmtBuffer>
 inline void
 format_arg_to(FmtBuffer& buffer, const printable_arg& parg) {
-    fmt::format_to(buffer, "{}={:#x}", parg.name, parg.value);
+    fmt::format_to(std::back_inserter(buffer), "{}={:#x}", parg.name, parg.value);
 }
 
 #undef FLAG_ENTRY

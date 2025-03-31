@@ -85,10 +85,10 @@ struct fs_config {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 3033006080;
+    constexpr static const uint64_t public_id = 1;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::fs_config;
@@ -256,10 +256,10 @@ struct Bloom_filter {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 907804672;
+    constexpr static const uint64_t public_id = 2;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::bloom_filter;
@@ -363,10 +363,10 @@ struct registry_request {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 286982144;
+    constexpr static const uint64_t public_id = 3;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::registry_request;
@@ -486,10 +486,10 @@ struct registry_register {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 2425487360;
+    constexpr static const uint64_t public_id = 4;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::registry_register;
@@ -608,10 +608,10 @@ struct stage {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 414908416;
+    constexpr static const uint64_t public_id = 5;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::stage;
@@ -731,10 +731,10 @@ struct stage_metadata {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 1056309248;
+    constexpr static const uint64_t public_id = 6;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::stage_metadata;
@@ -873,10 +873,10 @@ struct create {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 796590080;
+    constexpr static const uint64_t public_id = 7;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::create;
@@ -989,10 +989,10 @@ struct stat {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 1396244480;
+    constexpr static const uint64_t public_id = 8;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::stat;
@@ -1108,10 +1108,10 @@ struct remove_metadata {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 2087845888;
+    constexpr static const uint64_t public_id = 9;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::remove_metadata;
@@ -1232,10 +1232,10 @@ struct decr_size {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 1291649024;
+    constexpr static const uint64_t public_id = 10;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::decr_size;
@@ -1348,10 +1348,10 @@ struct update_metadentry {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 99483648;
+    constexpr static const uint64_t public_id = 11;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::update_metadentry;
@@ -1574,10 +1574,10 @@ struct get_metadentry_size {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 3426484224;
+    constexpr static const uint64_t public_id = 12;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::get_metadentry_size;
@@ -1690,10 +1690,10 @@ struct update_metadentry_size {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 2760900608;
+    constexpr static const uint64_t public_id = 13;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::update_metadentry_size;
@@ -1830,10 +1830,10 @@ struct mk_symlink {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 3207004160;
+    constexpr static const uint64_t public_id = 14;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::mk_symlink;
@@ -1948,10 +1948,10 @@ struct remove_data {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 2649292800;
+    constexpr static const uint64_t public_id = 15;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::remove_data;
@@ -2056,10 +2056,10 @@ struct write_data {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 3716481024;
+    constexpr static const uint64_t public_id = 16;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::write;
@@ -2241,10 +2241,10 @@ struct read_data {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 892207104;
+    constexpr static const uint64_t public_id = 17;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::read;
@@ -2426,10 +2426,10 @@ struct trunc_data {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 1850933248;
+    constexpr static const uint64_t public_id = 18;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::truncate;
@@ -2545,10 +2545,10 @@ struct get_dirents {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 4121034752;
+    constexpr static const uint64_t public_id = 19;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::get_dirents;
@@ -2669,10 +2669,10 @@ struct get_dirents_extended {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 1463943168;
+    constexpr static const uint64_t public_id = 20;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::get_dirents_extended;
@@ -2795,10 +2795,10 @@ struct chunk_stat {
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
     // understands Hermes RPCs)
-    constexpr static const uint64_t public_id = 532742144;
+    constexpr static const uint64_t public_id = 21;
 
     // RPC internal Mercury identifier
-    constexpr static const hg_id_t mercury_id = public_id;
+    constexpr static const hg_id_t mercury_id = 0;
 
     // RPC name
     constexpr static const auto name = gkfs::rpc::tag::get_chunk_stat;

@@ -313,7 +313,10 @@ PreloadContext::relativize_fd_path(int dirfd, const char* raw_path,
         path = raw_path;
     }
 
-    if(gkfs::path::resolve(path, relative_path, resolve_last_link)) {
+    auto [is_in_path, resolved_path] =
+            gkfs::path::resolve(path, resolve_last_link);
+    relative_path = resolved_path;
+    if(is_in_path) {
         return RelativizeStatus::internal;
     }
     return RelativizeStatus::external;
@@ -343,7 +346,10 @@ PreloadContext::relativize_path(const char* raw_path,
         path = raw_path;
     }
 
-    return gkfs::path::resolve(path, relative_path, resolve_last_link);
+    auto [is_in_path, resolved_path] =
+        gkfs::path::resolve(path, resolve_last_link);
+    relative_path = resolved_path;
+    return is_in_path;
 }
 
 const std::shared_ptr<gkfs::filemap::OpenFileMap>&

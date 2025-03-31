@@ -539,7 +539,7 @@ rpc_srv_get_dirents(hg_handle_t handle) {
 
     // Retrieve size of source buffer
     auto hgi = margo_get_info(handle);
-    auto mid = margo_hg_info_get_instance(hgi);
+    auto mid = margo_hg_handle_get_instance(handle);
     auto bulk_size = margo_bulk_get_size(in.bulk_handle);
     GKFS_DATA->spdlogger()->debug("{}() Got RPC: path '{}' bulk_size '{}' ",
                                   __func__, in.path, bulk_size);
@@ -698,7 +698,7 @@ rpc_srv_get_dirents_extended(hg_handle_t handle) {
 
     // Retrieve size of source buffer
     auto hgi = margo_get_info(handle);
-    auto mid = margo_hg_info_get_instance(hgi);
+    auto mid = margo_hg_handle_get_instance(handle);
     auto bulk_size = margo_bulk_get_size(in.bulk_handle);
     GKFS_DATA->spdlogger()->debug("{}() Got RPC: path '{}' bulk_size '{}' ",
                                   __func__, in.path, bulk_size);
