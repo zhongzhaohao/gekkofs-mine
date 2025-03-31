@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -45,8 +46,7 @@ hg_bulk_get_serialize_cached_size(hg_bulk_t handle);
  * Set cached pointer to serialization buffer.
  */
 HG_PRIVATE void
-hg_bulk_set_serialize_cached_ptr(
-    hg_bulk_t handle, void *buf, na_size_t buf_size);
+hg_bulk_set_serialize_cached_ptr(hg_bulk_t handle, void *buf, size_t buf_size);
 
 #ifdef __cplusplus
 }

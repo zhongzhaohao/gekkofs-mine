@@ -60,10 +60,12 @@ else()
 endif()
 if(MERCURY_BUILD_CONFIGURATION MATCHES "Asan")
   set(MERCURY_MEMORYCHECK_TYPE "AddressSanitizer")
+  set(USE_MPI OFF)
 endif()
 if(MERCURY_BUILD_CONFIGURATION MATCHES "Tsan")
   set(MERCURY_MEMORYCHECK_TYPE "ThreadSanitizer")
   set(USE_UCX OFF) # Disable for now to prevent errors
+  set(USE_MPI OFF)
 endif()
 if(MERCURY_BUILD_CONFIGURATION MATCHES "Ubsan")
   set(MERCURY_MEMORYCHECK_TYPE "UndefinedBehaviorSanitizer")
@@ -75,12 +77,13 @@ if(APPLE)
 else()
   # Disable sockets with Tsan builds (OFI issues)
   if(MERCURY_BUILD_CONFIGURATION MATCHES "Tsan")
-    set(OFI_PROTOCOLS "tcp")
+    set(OFI_PROTOCOLS "tcp;tcp_rxm")
+    set(ENV{FI_PROVIDER} "tcp") # ensure MPI uses tcp
   else()
-    set(OFI_PROTOCOLS "sockets;tcp")
+    set(OFI_PROTOCOLS "sockets;tcp;tcp_rxm")
   endif()
 endif()
-set(UCX_PROTOCOLS "tcp")
+set(UCX_PROTOCOLS "tcp;all")
 
 # MERCURY_DASHBOARD_MODEL=Experimental | Nightly | Continuous
 if(NOT DEFINED dashboard_model)
@@ -114,6 +117,11 @@ if(NOT DEFINED build_shared_libs)
   set(build_shared_libs ${MERCURY_BUILD_SHARED})
 endif()
 set(CTEST_CMAKE_GENERATOR "Unix Makefiles")
+
+# Build dynamic plugins
+if(NOT DEFINED build_dynamic_plugins)
+  set(build_dynamic_plugins OFF)
+endif()
 
 # Optional coverage options
 if(MERCURY_DO_COVERAGE)
@@ -195,6 +203,12 @@ set(CTEST_BUILD_NAME "${BUILD_NAME}-${OS_NAME}-$ENV{CC}-${lower_mercury_build_co
 
 set(dashboard_binary_name mercury-${lower_mercury_build_configuration})
 
+if(NOT DEFINED MERCURY_MEMORYCHECK_TYPE AND NOT MERCURY_DO_COVERAGE)
+  set(build_examples TRUE)
+else()
+  set(build_examples FALSE)
+endif()
+
 # OS specific options
 if(APPLE)
   set(SOEXT dylib)
@@ -204,16 +218,20 @@ if(APPLE)
   set(USE_OFI ON)
   set(USE_SM OFF)
   set(USE_UCX OFF)
+  set(USE_PSM OFF)
 else()
   set(SOEXT so)
   set(PROC_NAME_OPT -r)
   set(USE_BMI ON)
-  set(USE_MPI ON)
+  if(NOT DEFINED USE_MPI)
+    set(USE_MPI ON)
+  endif()
   set(USE_OFI ON)
   set(USE_SM ON)
   if(NOT DEFINED USE_UCX)
     set(USE_UCX ON)
   endif()
+  set(USE_PSM OFF) # Disable for now until mpirun/psm issues are fixed
   set(CMAKE_FIND_ROOT_PATH $ENV{DEPS_PREFIX} ${CMAKE_FIND_ROOT_PATH})
 endif()
 
@@ -222,8 +240,9 @@ if($ENV{CC} MATCHES "^gcc.*")
 endif()
 if($ENV{CC} MATCHES "^clang.*")
   set(MERCURY_C_FLAGS "-Wall -Wthread-safety -Wextra -Wshadow -Winline -Wundef -Wcast-qual -Wconversion -Wmissing-prototypes -pedantic -Wpointer-arith -Wformat=2 -std=gnu11")
+  set(USE_MPI OFF) # MPICH configure issue on Ubuntu 22.04
 endif()
-if($ENV{CC} MATCHES "^icc.*")
+if($ENV{CC} MATCHES "^icx.*")
   set(MERCURY_C_FLAGS "-Wall -Wextra -Wshadow -Winline -Wundef -Wcast-qual -Wconversion -Wmissing-prototypes -pedantic -Wpointer-arith -Wformat=2 -std=gnu11")
 endif()
 set(MERCURY_C_FLAGS ${MERCURY_C_FLAGS})
@@ -234,6 +253,7 @@ set(dashboard_cache "
 CMAKE_C_FLAGS:STRING=${MERCURY_C_FLAGS}
 CMAKE_CXX_FLAGS:STRING=${MERCURY_CXX_FLAGS}
 
+BUILD_EXAMPLES:BOOL=${build_examples}
 BUILD_SHARED_LIBS:BOOL=${build_shared_libs}
 BUILD_TESTING:BOOL=ON
 
@@ -246,17 +266,21 @@ MERCURY_ENABLE_DEBUG:BOOL=${enable_debug}
 MERCURY_USE_BOOST_PP:BOOL=OFF
 MERCURY_USE_CHECKSUMS:BOOL=${USE_CHECKSUMS}
 MERCURY_USE_XDR:BOOL=OFF
+NA_USE_DYNAMIC_PLUGINS:BOOL=${build_dynamic_plugins}
+NA_DEFAULT_PLUGIN_PATH:PATH=${CTEST_BINARY_DIRECTORY}/bin
 NA_USE_BMI:BOOL=${USE_BMI}
 BMI_INCLUDE_DIR:PATH=$ENV{DEPS_PREFIX}/include
 BMI_LIBRARY:FILEPATH=$ENV{DEPS_PREFIX}/lib/libbmi.${SOEXT}
 NA_USE_MPI:BOOL=${USE_MPI}
-NA_USE_CCI:BOOL=OFF
 NA_USE_SM:BOOL=${USE_SM}
 NA_USE_OFI:BOOL=${USE_OFI}
 NA_OFI_TESTING_PROTOCOL:STRING=${OFI_PROTOCOLS}
 NA_USE_UCX:BOOL=${USE_UCX}
 NA_UCX_TESTING_PROTOCOL:STRING=${UCX_PROTOCOLS}
 NA_MPI_TESTING_PROTOCOL:STRING=static
+NA_USE_PSM:BOOL=${USE_PSM}
+PSM_INCLUDE_DIR:PATH=$ENV{DEPS_PREFIX}/include
+PSM_LIBRARY:FILEPATH=$ENV{DEPS_PREFIX}/lib64/libpsm_infinipath.${SOEXT}
 
 MERCURY_TESTING_ENABLE_PARALLEL:BOOL=${USE_MPI}
 MERCURY_TESTING_INIT_COMMAND:STRING=killall -9 ${PROC_NAME_OPT} hg_test_server;

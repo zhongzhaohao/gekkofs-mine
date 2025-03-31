@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -13,6 +14,11 @@
 /****************/
 /* Local Macros */
 /****************/
+
+#ifdef _WIN32
+#    undef strdup
+#    define strdup _strdup
+#endif
 
 /************************************/
 /* Local Type and Struct Definition */
@@ -42,7 +48,7 @@ hg_string_object_init(hg_string_object_t *string)
 /*---------------------------------------------------------------------------*/
 hg_return_t
 hg_string_object_init_char(
-    hg_string_object_t *string, char *s, hg_bool_t is_owned)
+    hg_string_object_t *string, char *s, uint8_t is_owned)
 {
     hg_return_t ret = HG_SUCCESS;
 
@@ -56,7 +62,7 @@ hg_string_object_init_char(
 /*---------------------------------------------------------------------------*/
 hg_return_t
 hg_string_object_init_const_char(
-    hg_string_object_t *string, const char *s, hg_bool_t is_owned)
+    hg_string_object_t *string, const char *s, uint8_t is_owned)
 {
     union {
         char *p;

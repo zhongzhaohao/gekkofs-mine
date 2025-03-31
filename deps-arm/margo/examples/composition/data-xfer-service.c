@@ -32,7 +32,7 @@ static void data_xfer_read_ult(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
     hgi = margo_get_info(handle);
     assert(hgi);
-    mid = margo_hg_info_get_instance(hgi);
+    mid = margo_hg_handle_get_instance(handle);
     assert(mid != MARGO_INSTANCE_NULL);
 
 #if 0
@@ -97,6 +97,10 @@ void data_xfer_deregister(margo_instance_id mid,
                           ABT_pool          pool,
                           uint32_t          provider_id)
 {
+    (void)mid;
+    (void)pool;
+    (void)provider_id;
+
     margo_bulk_free(g_buffer_bulk_handle);
     free(g_buffer);
 

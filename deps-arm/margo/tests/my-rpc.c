@@ -46,10 +46,9 @@ static void my_rpc_ult(hg_handle_t handle)
     buffer = calloc(1, 512);
     assert(buffer);
 
-    /* get handle info and margo instance */
+    /* get margo instance */
     hgi = margo_get_info(handle);
-    assert(hgi);
-    mid = margo_hg_info_get_instance(hgi);
+    mid = margo_hg_handle_get_instance(handle);
     assert(mid != MARGO_INSTANCE_NULL);
 
     if (in.dump_state) margo_state_dump(mid, "-", 0, NULL);
@@ -136,11 +135,11 @@ static void my_rpc_hang_ult(hg_handle_t handle)
     /* get handle info and margo instance */
     hgi = margo_get_info(handle);
     assert(hgi);
-    mid = margo_hg_info_get_instance(hgi);
+    mid = margo_hg_handle_get_instance(handle);
     assert(mid != MARGO_INSTANCE_NULL);
 
-    /* sleep for an hour (to allow client to test timeout capability) */
-    margo_thread_sleep(mid, 1000 * 60 * 60);
+    /* sleep for 5 seconds (to allow client to test timeout capability) */
+    margo_thread_sleep(mid, 5000);
 
     /* set up target buffer for bulk transfer */
     size   = 512;

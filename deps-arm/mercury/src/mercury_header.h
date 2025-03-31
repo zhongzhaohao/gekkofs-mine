@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -13,36 +14,30 @@
 /* Public Type and Struct Definition */
 /*************************************/
 
-#if defined(__GNUC__) || defined(_WIN32)
-#    pragma pack(push, 1)
-#else
-#    warning                                                                   \
-        "Proc header struct padding may not be consistent across platforms."
-#endif
 #ifdef HG_HAS_CHECKSUMS
-struct hg_header_hash {
-    hg_uint32_t payload; /* Payload checksum (32-bits checksum) */
-};
-#endif
+HG_PACKED(struct hg_header_hash {
+    uint32_t payload; /* Payload checksum (32-bits checksum) */
+});
 
-struct hg_header_input {
-#ifdef HG_HAS_CHECKSUMS
+HG_PACKED(struct hg_header_input {
     struct hg_header_hash hash; /* Hash */
-#else
-    hg_uint32_t pad;
-#endif
     /* 160 bits here */
-};
+});
 
-struct hg_header_output {
-#ifdef HG_HAS_CHECKSUMS
+HG_PACKED(struct hg_header_output {
     struct hg_header_hash hash; /* Hash */
-#endif
-    hg_uint32_t pad;
-    /* 128/64 bits here */
-};
-#if defined(__GNUC__) || defined(_WIN32)
-#    pragma pack(pop)
+    /* 160 bits here */
+});
+#else
+HG_PACKED(struct hg_header_input {
+    uint32_t pad;
+    /* 128 bits here */
+});
+
+HG_PACKED(struct hg_header_output {
+    uint32_t pad;
+    /* 128 bits here */
+});
 #endif
 
 /* Common header struct input/output */

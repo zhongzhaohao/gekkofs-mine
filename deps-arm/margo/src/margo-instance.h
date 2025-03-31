@@ -13,42 +13,25 @@
 #include <stdlib.h>
 #include <json-c/json.h>
 
-#include <margo-config.h>
+#include <margo-config-private.h>
 #include <time.h>
 #include <math.h>
 
 #include "margo.h"
+#include "margo-timer.h"
+#include "margo-config.h"
+#include "margo-abt-config.h"
+#include "margo-hg-config.h"
 #include "margo-abt-macros.h"
 #include "margo-logging.h"
+#include "margo-monitoring.h"
 #include "margo-bulk-util.h"
-#include "margo-timer.h"
+#include "margo-timer-private.h"
 #include "utlist.h"
 #include "uthash.h"
 
 #define MARGO_OWNS_HG_CLASS   0x1
 #define MARGO_OWNS_HG_CONTEXT 0x2
-
-/* Structure to store timing information */
-struct diag_data {
-    /* breadcrumb stats */
-    margo_breadcrumb_stats stats;
-
-    /* origin or target */
-    margo_breadcrumb_type type;
-
-    uint64_t rpc_breadcrumb; /* identifier for rpc and it's ancestors */
-    struct margo_global_breadcrumb_key key;
-
-    /* used to combine rpc_breadcrumb, addr_hash and provider_id to create a
-     * unique key for HASH_ADD inside margo_breadcrumb_measure */
-    __uint128_t x;
-
-    /*sparkline data for breadcrumb */
-    double sparkline_time[100];
-    double sparkline_count[100];
-
-    UT_hash_handle hh; /* hash table link */
-};
 
 struct margo_handle_cache_el; /* defined in margo-handle-cache.c */
 
@@ -65,42 +48,38 @@ struct margo_timer_list; /* defined in margo-timer.c */
  * debugging and instrumentation purposes
  */
 struct margo_registered_rpc {
-    hg_id_t  id;                       /* rpc id */
-    uint64_t rpc_breadcrumb_fragment;  /* fragment id used in rpc tracing */
-    char     func_name[64];            /* string name of rpc */
-    struct margo_registered_rpc* next; /* pointer to next in list */
-};
-
-/* Struct to track pools created by margo along with a flag indicating if
- * margo is responsible for explicitly free'ing the pool or not.
- */
-struct margo_abt_pool {
-    ABT_pool pool;            /* Argobots pool */
-    bool     margo_free_flag; /* flag if Margo is responsible for freeing */
+    hg_id_t                      id;            /* rpc id */
+    char                         func_name[64]; /* string name of rpc */
+    struct margo_registered_rpc* next;          /* pointer to next in list */
 };
 
 struct margo_instance {
-    /* json config */
-    struct json_object* json_cfg;
+    /* Refcount */
+    _Atomic unsigned refcount;
 
-    /* mercury/argobots state */
-    hg_class_t*   hg_class;
-    hg_context_t* hg_context;
-    uint8_t       hg_ownership;
-    ABT_pool      progress_pool;
-    ABT_pool      rpc_pool;
+    /* Argobots environment */
+    struct margo_abt abt;
 
-    /* xstreams and pools built from argobots config */
-    struct margo_abt_pool* abt_pools;
-    ABT_xstream*           abt_xstreams;
-    unsigned               num_abt_pools;
-    unsigned               num_abt_xstreams;
-    bool*                  owns_abt_xstream;
+    /* Mercury environment */
+    struct margo_hg hg;
+
+    /* Progress pool and default handler pool (index from abt.pools) */
+    _Atomic unsigned progress_pool_idx;
+    _Atomic unsigned rpc_pool_idx;
 
     /* internal to margo for this particular instance */
-    ABT_thread hg_progress_tid;
-    int        hg_progress_shutdown_flag;
-    int        hg_progress_timeout_ub;
+    ABT_thread       hg_progress_tid;
+    _Atomic int      hg_progress_shutdown_flag;
+    _Atomic unsigned hg_progress_timeout_ub;
+    _Atomic unsigned hg_progress_spindown_msec;
+
+    /* "when_needed" progress logic */
+    struct {
+        bool             flag;
+        uint64_t         pending;
+        ABT_mutex_memory mutex;
+        ABT_cond_memory  cond;
+    } progress_when_needed;
 
     uint16_t num_registered_rpcs; /* number of registered rpc's by all providers
                                      on this instance */
@@ -109,8 +88,8 @@ struct margo_instance {
     struct margo_registered_rpc* registered_rpcs;
 
     /* control logic for callers waiting on margo to be finalized */
-    int                       finalize_flag;
-    int                       refcount;
+    _Atomic bool              finalize_flag;
+    _Atomic int               finalize_refcount;
     ABT_mutex                 finalize_mutex;
     ABT_cond                  finalize_cond;
     struct margo_finalize_cb* finalize_cb;
@@ -126,9 +105,14 @@ struct margo_instance {
     hg_id_t shutdown_rpc_id;
     bool    enable_remote_shutdown;
 
+    /* control logic for provider identity */
+    hg_id_t identity_rpc_id;
+
     /* timer data */
     struct margo_timer_list* timer_list;
+
     /* linked list of free hg handles and a hash of in-use handles */
+    size_t                        handle_cache_size;
     struct margo_handle_cache_el* free_handle_list;
     struct margo_handle_cache_el* used_handle_hash;
     ABT_mutex handle_cache_mtx; /* mutex protecting access to above caches */
@@ -137,45 +121,71 @@ struct margo_instance {
     struct margo_logger logger;
     margo_log_level     log_level;
 
+    /* monitoring */
+    struct margo_monitor* monitor;
+
+    /* some extra stats on progress/trigger calls */
+    _Atomic uint64_t num_progress_calls;
+    _Atomic uint64_t num_trigger_calls;
+
+    /* callpath tracking */
+    ABT_key current_rpc_id_key;
+
     /* optional diagnostics data tracking */
-    /* NOTE: technically the following fields are subject to races if they
-     * are updated from more than one thread at a time.  We will be careful
-     * to only update the counters from the progress_fn,
-     * which will serialize access.
-     */
-    ABT_thread        sparkline_data_collection_tid;
-    int               diag_enabled;
-    int               profile_enabled;
-    uint64_t          self_addr_hash;
-    double            previous_sparkline_data_collection_time;
-    uint16_t          sparkline_index;
-    struct diag_data  diag_trigger_elapsed;
-    struct diag_data  diag_progress_elapsed_zero_timeout;
-    struct diag_data  diag_progress_elapsed_nonzero_timeout;
-    struct diag_data  diag_progress_timeout_value;
-    struct diag_data  diag_bulk_create_elapsed;
-    struct diag_data* diag_rpc;
-    ABT_mutex         diag_rpc_mutex;
+    int abt_profiling_enabled;
 };
+
+#define MARGO_PROGRESS_POOL(mid) (mid)->abt.pools[mid->progress_pool_idx].pool
+
+#define MARGO_RPC_POOL(mid) (mid)->abt.pools[mid->rpc_pool_idx].pool
+
+typedef enum margo_request_kind
+{
+    MARGO_REQ_EVENTUAL,
+    MARGO_REQ_CALLBACK
+} margo_request_kind;
 
 struct margo_request_struct {
-    margo_eventual_t eventual;
-    hg_return_t      hret;
-    margo_timer_t*   timer;
-    hg_handle_t      handle;
-    double           start_time; /* timestamp of when the operation started */
-    uint64_t rpc_breadcrumb; /* statistics tracking identifier, if applicable */
-    uint64_t server_addr_hash; /* hash of globally unique string addr of margo
-                                  server instance */
-    uint16_t provider_id; /* id of the provider servicing the request, local to
-                             the margo server instance */
+    margo_timer_t        timer;
+    margo_instance_id    mid;
+    hg_handle_t          handle;
+    margo_monitor_data_t monitor_data;
+    margo_request_type   type; // forward, respond, or bulk
+    margo_request_kind   kind; // callback or eventual
+    union {
+        struct {
+            margo_eventual_t ev;
+            hg_return_t      hret;
+        } eventual;
+        struct {
+            void (*cb)(void*, hg_return_t);
+            void* uargs;
+        } callback;
+    } u;
 };
 
+// Data registered to an RPC id with HG_Register_data
 struct margo_rpc_data {
     margo_instance_id mid;
-    ABT_pool          pool;
-    void*             user_data;
+    _Atomic(ABT_pool) pool;
+    char*        rpc_name;
+    hg_proc_cb_t in_proc_cb;  /* user-provided input proc */
+    hg_proc_cb_t out_proc_cb; /* user-provided output proc */
+    void*        user_data;
     void (*user_free_callback)(void*);
+};
+
+// Data associated with a handle with HG_Set_data
+struct margo_handle_data {
+    margo_instance_id mid;
+    ABT_pool          pool;
+    const char*       rpc_name; /* note: same pointer as in margo_rpc_data,
+                                   not the responsibility of the handle to free it */
+    hg_proc_cb_t in_proc_cb;    /* user-provided input proc */
+    hg_proc_cb_t out_proc_cb;   /* user-provided output proc */
+    void*        user_data;
+    void (*user_free_callback)(void*);
+    margo_monitor_data_t monitor_data;
 };
 
 struct lookup_cb_evt {
@@ -194,6 +204,50 @@ typedef struct {
     ABT_cond  cond;
     char      is_asleep;
 } margo_thread_sleep_cb_dat;
+
+#define PROGRESS_NEEDED_INCR(__mid__)                                \
+    do {                                                             \
+        bool notify = false;                                         \
+        if ((__mid__)->progress_when_needed.flag) {                  \
+            ABT_mutex_lock(ABT_MUTEX_MEMORY_GET_HANDLE(              \
+                &(__mid__)->progress_when_needed.mutex));            \
+            notify = ++(__mid__)->progress_when_needed.pending == 1; \
+            ABT_mutex_unlock(ABT_MUTEX_MEMORY_GET_HANDLE(            \
+                &(__mid__)->progress_when_needed.mutex));            \
+        }                                                            \
+        if (notify) {                                                \
+            ABT_cond_signal(ABT_COND_MEMORY_GET_HANDLE(              \
+                &(__mid__)->progress_when_needed.cond));             \
+        }                                                            \
+    } while (0)
+
+#define PROGRESS_NEEDED_DECR(__mid__)                     \
+    do {                                                  \
+        if ((__mid__)->progress_when_needed.flag) {       \
+            ABT_mutex_lock(ABT_MUTEX_MEMORY_GET_HANDLE(   \
+                &(__mid__)->progress_when_needed.mutex)); \
+            --(__mid__)->progress_when_needed.pending;    \
+            ABT_mutex_unlock(ABT_MUTEX_MEMORY_GET_HANDLE( \
+                &(__mid__)->progress_when_needed.mutex)); \
+        }                                                 \
+    } while (0)
+
+#define WAIT_FOR_PROGRESS_TO_BE_NEEDED(__mid__)                             \
+    do {                                                                    \
+        if ((__mid__)->progress_when_needed.flag) {                         \
+            ABT_mutex_lock(ABT_MUTEX_MEMORY_GET_HANDLE(                     \
+                &(__mid__)->progress_when_needed.mutex));                   \
+            while (!(__mid__)->progress_when_needed.pending) {              \
+                ABT_cond_wait(ABT_COND_MEMORY_GET_HANDLE(                   \
+                                  &(__mid__)->progress_when_needed.cond),   \
+                              ABT_MUTEX_MEMORY_GET_HANDLE(                  \
+                                  &(__mid__)->progress_when_needed.mutex)); \
+                if (!(__mid__)->progress_when_needed.flag) break;           \
+            }                                                               \
+            ABT_mutex_unlock(ABT_MUTEX_MEMORY_GET_HANDLE(                   \
+                &(__mid__)->progress_when_needed.mutex));                   \
+        }                                                                   \
+    } while (0)
 
 #define MARGO_TRACE    margo_trace
 #define MARGO_DEBUG    margo_debug

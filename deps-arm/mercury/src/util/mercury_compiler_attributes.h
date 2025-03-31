@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -25,7 +26,6 @@
 #    define __GCC4_has_attribute___visibility__         1
 #    define __GCC4_has_attribute___warn_unused_result__ 1
 #    define __GCC4_has_attribute___unused__             1
-#    define __GCC4_has_attribute___aligned__            1
 #    define __GCC4_has_attribute___format__             1
 #    define __GCC4_has_attribute___fallthrough__        0
 #endif
@@ -63,14 +63,22 @@
 #    define HG_ATTR_UNUSED
 #endif
 
-/* Alignment */
+/* Alignment (not optional) */
 #if defined(_WIN32)
 #    define HG_ATTR_ALIGNED(x, a) __declspec(align(a)) x
-#elif __has_attribute(__aligned__)
-#    define HG_ATTR_ALIGNED(x, a) x __attribute__((__aligned__(a)))
 #else
-#    define HG_ATTR_ALIGNED(x, a)
+#    define HG_ATTR_ALIGNED(x, a) x __attribute__((__aligned__(a)))
 #endif
+
+/* Packed (not optional) */
+#if defined(_WIN32)
+#    define HG_ATTR_PACKED_PUSH __pragma(pack(push, 1))
+#    define HG_ATTR_PACKED_POP  __pragma(pack(pop))
+#else
+#    define HG_ATTR_PACKED_PUSH
+#    define HG_ATTR_PACKED_POP __attribute__((__packed__))
+#endif
+#define HG_ATTR_PACKED(x) HG_ATTR_PACKED_PUSH x HG_ATTR_PACKED_POP
 
 /* Check format arguments */
 #if defined(_WIN32)

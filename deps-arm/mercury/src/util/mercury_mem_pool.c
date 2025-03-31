@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -40,8 +41,8 @@
  * Memory chunk (points to actual data).
  */
 struct hg_mem_pool_chunk {
-    HG_QUEUE_ENTRY(hg_mem_pool_chunk) entry; /* Entry in chunk_list */
-    char *chunk;                             /* Must be last        */
+    STAILQ_ENTRY(hg_mem_pool_chunk) entry; /* Entry in chunk_list */
+    char *chunk;                           /* Must be last        */
 };
 
 /**
@@ -49,8 +50,8 @@ struct hg_mem_pool_chunk {
  * buffer is registered.
  */
 struct hg_mem_pool_block {
-    HG_QUEUE_HEAD(hg_mem_pool_chunk) chunks; /* Chunk list           */
-    HG_QUEUE_ENTRY(hg_mem_pool_block) entry; /* Entry in block list  */
+    STAILQ_HEAD(, hg_mem_pool_chunk) chunks; /* Chunk list           */
+    STAILQ_ENTRY(hg_mem_pool_block) entry;   /* Entry in block list  */
     void *mr_handle;                         /* Pointer to MR handle */
     hg_thread_spin_t chunk_lock;             /* Chunk list lock      */
 };
@@ -61,9 +62,10 @@ struct hg_mem_pool_block {
 struct hg_mem_pool {
     hg_thread_mutex_t extend_mutex;                /* Extend mutex    */
     hg_thread_cond_t extend_cond;                  /* Extend cond     */
-    HG_QUEUE_HEAD(hg_mem_pool_block) blocks;       /* Block list      */
+    STAILQ_HEAD(, hg_mem_pool_block) blocks;       /* Block list      */
     hg_mem_pool_register_func_t register_func;     /* Register func   */
     hg_mem_pool_deregister_func_t deregister_func; /* Deregister func */
+    unsigned long flags;                           /* Optional flags */
     void *arg;                                     /* Func args       */
     size_t chunk_size;                             /* Chunk size      */
     size_t chunk_count;                            /* Chunk count     */
@@ -78,7 +80,7 @@ struct hg_mem_pool {
 /* Allocate new pool block */
 static struct hg_mem_pool_block *
 hg_mem_pool_block_alloc(size_t chunk_size, size_t chunk_count,
-    hg_mem_pool_register_func_t register_func, void *arg);
+    hg_mem_pool_register_func_t register_func, unsigned long flags, void *arg);
 
 /* Free pool block */
 static void
@@ -93,7 +95,7 @@ hg_mem_pool_block_free(struct hg_mem_pool_block *hg_mem_pool_block,
 
 struct hg_mem_pool *
 hg_mem_pool_create(size_t chunk_size, size_t chunk_count, size_t block_count,
-    hg_mem_pool_register_func_t register_func,
+    hg_mem_pool_register_func_t register_func, unsigned long flags,
     hg_mem_pool_deregister_func_t deregister_func, void *arg)
 {
     struct hg_mem_pool *hg_mem_pool = NULL;
@@ -102,9 +104,10 @@ hg_mem_pool_create(size_t chunk_size, size_t chunk_count, size_t block_count,
     hg_mem_pool = (struct hg_mem_pool *) malloc(sizeof(struct hg_mem_pool));
     HG_UTIL_CHECK_ERROR_NORET(
         hg_mem_pool == NULL, done, "Could not allocate memory pool");
-    HG_QUEUE_INIT(&hg_mem_pool->blocks);
+    STAILQ_INIT(&hg_mem_pool->blocks);
     hg_mem_pool->register_func = register_func;
     hg_mem_pool->deregister_func = deregister_func;
+    hg_mem_pool->flags = flags;
     hg_mem_pool->arg = arg;
     hg_mem_pool->chunk_size = chunk_size;
     hg_mem_pool->chunk_count = chunk_count;
@@ -116,10 +119,10 @@ hg_mem_pool_create(size_t chunk_size, size_t chunk_count, size_t block_count,
     /* Allocate single block */
     for (i = 0; i < block_count; i++) {
         struct hg_mem_pool_block *hg_mem_pool_block = hg_mem_pool_block_alloc(
-            chunk_size, chunk_count, register_func, arg);
+            chunk_size, chunk_count, register_func, flags, arg);
         HG_UTIL_CHECK_ERROR_NORET(hg_mem_pool_block == NULL, error,
             "Could not allocate block of %zu bytes", chunk_size * chunk_count);
-        HG_QUEUE_PUSH_TAIL(&hg_mem_pool->blocks, hg_mem_pool_block, entry);
+        STAILQ_INSERT_TAIL(&hg_mem_pool->blocks, hg_mem_pool_block, entry);
     }
 
 done:
@@ -137,10 +140,10 @@ hg_mem_pool_destroy(struct hg_mem_pool *hg_mem_pool)
     if (!hg_mem_pool)
         return;
 
-    while (!HG_QUEUE_IS_EMPTY(&hg_mem_pool->blocks)) {
+    while (!STAILQ_EMPTY(&hg_mem_pool->blocks)) {
         struct hg_mem_pool_block *hg_mem_pool_block =
-            HG_QUEUE_FIRST(&hg_mem_pool->blocks);
-        HG_QUEUE_POP_HEAD(&hg_mem_pool->blocks, entry);
+            STAILQ_FIRST(&hg_mem_pool->blocks);
+        STAILQ_REMOVE_HEAD(&hg_mem_pool->blocks, entry);
         hg_mem_pool_block_free(
             hg_mem_pool_block, hg_mem_pool->deregister_func, hg_mem_pool->arg);
     }
@@ -153,7 +156,7 @@ hg_mem_pool_destroy(struct hg_mem_pool *hg_mem_pool)
 /*---------------------------------------------------------------------------*/
 static struct hg_mem_pool_block *
 hg_mem_pool_block_alloc(size_t chunk_size, size_t chunk_count,
-    hg_mem_pool_register_func_t register_func, void *arg)
+    hg_mem_pool_register_func_t register_func, unsigned long flags, void *arg)
 {
     struct hg_mem_pool_block *hg_mem_pool_block = NULL;
     size_t page_size = (size_t) hg_mem_get_page_size();
@@ -173,7 +176,7 @@ hg_mem_pool_block_alloc(size_t chunk_size, size_t chunk_count,
 
     /* Register memory if registration function is provided */
     if (register_func) {
-        int rc = register_func(mem_ptr, block_size, &mr_handle, arg);
+        int rc = register_func(mem_ptr, block_size, flags, &mr_handle, arg);
         if (unlikely(rc != HG_UTIL_SUCCESS)) {
             hg_mem_aligned_free(mem_ptr);
             HG_UTIL_GOTO_ERROR(done, mem_ptr, NULL, "register_func() failed");
@@ -183,7 +186,7 @@ hg_mem_pool_block_alloc(size_t chunk_size, size_t chunk_count,
     /* Map allocated memory to block */
     hg_mem_pool_block = (struct hg_mem_pool_block *) mem_ptr;
 
-    HG_QUEUE_INIT(&hg_mem_pool_block->chunks);
+    STAILQ_INIT(&hg_mem_pool_block->chunks);
     hg_thread_spin_init(&hg_mem_pool_block->chunk_lock);
     hg_mem_pool_block->mr_handle = mr_handle;
 
@@ -193,7 +196,7 @@ hg_mem_pool_block_alloc(size_t chunk_size, size_t chunk_count,
             (struct hg_mem_pool_chunk *) ((char *) hg_mem_pool_block +
                                           block_header +
                                           i * (chunk_header + chunk_size));
-        HG_QUEUE_PUSH_TAIL(
+        STAILQ_INSERT_TAIL(
             &hg_mem_pool_block->chunks, hg_mem_pool_chunk, entry);
     }
 
@@ -241,9 +244,9 @@ hg_mem_pool_alloc(
 
         /* Check whether we can get a block from one of the pools */
         hg_thread_spin_lock(&hg_mem_pool->block_lock);
-        HG_QUEUE_FOREACH (hg_mem_pool_block, &hg_mem_pool->blocks, entry) {
+        STAILQ_FOREACH (hg_mem_pool_block, &hg_mem_pool->blocks, entry) {
             hg_thread_spin_lock(&hg_mem_pool_block->chunk_lock);
-            found = !HG_QUEUE_IS_EMPTY(&hg_mem_pool_block->chunks);
+            found = !STAILQ_EMPTY(&hg_mem_pool_block->chunks);
             hg_thread_spin_unlock(&hg_mem_pool_block->chunk_lock);
             if (found)
                 break;
@@ -265,13 +268,13 @@ hg_mem_pool_alloc(
 
             hg_mem_pool_block = hg_mem_pool_block_alloc(hg_mem_pool->chunk_size,
                 hg_mem_pool->chunk_count, hg_mem_pool->register_func,
-                hg_mem_pool->arg);
+                hg_mem_pool->flags, hg_mem_pool->arg);
             HG_UTIL_CHECK_ERROR(hg_mem_pool_block == NULL, done, mem_ptr, NULL,
                 "Could not allocate block of %zu bytes",
                 hg_mem_pool->chunk_size * hg_mem_pool->chunk_count);
 
             hg_thread_spin_lock(&hg_mem_pool->block_lock);
-            HG_QUEUE_PUSH_TAIL(&hg_mem_pool->blocks, hg_mem_pool_block, entry);
+            STAILQ_INSERT_TAIL(&hg_mem_pool->blocks, hg_mem_pool_block, entry);
             hg_thread_spin_unlock(&hg_mem_pool->block_lock);
 
             hg_thread_mutex_lock(&hg_mem_pool->extend_mutex);
@@ -282,9 +285,9 @@ hg_mem_pool_alloc(
 
         /* Try to pick a node from one of the available pools */
         hg_thread_spin_lock(&hg_mem_pool_block->chunk_lock);
-        if (!HG_QUEUE_IS_EMPTY(&hg_mem_pool_block->chunks)) {
-            hg_mem_pool_chunk = HG_QUEUE_FIRST(&hg_mem_pool_block->chunks);
-            HG_QUEUE_POP_HEAD(&hg_mem_pool_block->chunks, entry);
+        if (!STAILQ_EMPTY(&hg_mem_pool_block->chunks)) {
+            hg_mem_pool_chunk = STAILQ_FIRST(&hg_mem_pool_block->chunks);
+            STAILQ_REMOVE_HEAD(&hg_mem_pool_block->chunks, entry);
         }
         hg_thread_spin_unlock(&hg_mem_pool_block->chunk_lock);
     } while (!hg_mem_pool_chunk);
@@ -310,7 +313,7 @@ hg_mem_pool_free(
 
     /* Put the node back to the pool */
     hg_thread_spin_lock(&hg_mem_pool->block_lock);
-    HG_QUEUE_FOREACH (hg_mem_pool_block, &hg_mem_pool->blocks, entry) {
+    STAILQ_FOREACH (hg_mem_pool_block, &hg_mem_pool->blocks, entry) {
         /* If MR handle is NULL, it does not really matter which pool we push
          * the node back to.
          */
@@ -318,7 +321,7 @@ hg_mem_pool_free(
             struct hg_mem_pool_chunk *hg_mem_pool_chunk =
                 container_of(mem_ptr, struct hg_mem_pool_chunk, chunk);
             hg_thread_spin_lock(&hg_mem_pool_block->chunk_lock);
-            HG_QUEUE_PUSH_TAIL(
+            STAILQ_INSERT_TAIL(
                 &hg_mem_pool_block->chunks, hg_mem_pool_chunk, entry);
             hg_thread_spin_unlock(&hg_mem_pool_block->chunk_lock);
             found = 1;
@@ -338,7 +341,7 @@ hg_mem_pool_chunk_offset(
     struct hg_mem_pool_block *hg_mem_pool_block;
 
     hg_thread_spin_lock(&hg_mem_pool->block_lock);
-    HG_QUEUE_FOREACH (hg_mem_pool_block, &hg_mem_pool->blocks, entry)
+    STAILQ_FOREACH (hg_mem_pool_block, &hg_mem_pool->blocks, entry)
         if (hg_mem_pool_block->mr_handle == mr_handle)
             break;
     hg_thread_spin_unlock(&hg_mem_pool->block_lock);

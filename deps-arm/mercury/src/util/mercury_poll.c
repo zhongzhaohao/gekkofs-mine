@@ -1,11 +1,13 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "mercury_poll.h"
 #include "mercury_event.h"
+#include "mercury_param.h"
 #include "mercury_thread_mutex.h"
 #include "mercury_util_error.h"
 
@@ -33,10 +35,6 @@
 
 #define HG_POLL_INIT_NEVENTS 32
 #define HG_POLL_MAX_EVENTS   4096
-
-#ifndef MIN
-#    define MIN(a, b) (((a) < (b)) ? (a) : (b))
-#endif
 
 /************************************/
 /* Local Type and Struct Definition */
@@ -127,7 +125,9 @@ int
 hg_poll_destroy(hg_poll_set_t *poll_set)
 {
     int ret = HG_UTIL_SUCCESS;
+#ifndef _WIN32
     int rc;
+#endif
 
     if (!poll_set)
         goto done;
@@ -164,7 +164,7 @@ done:
 
 /*---------------------------------------------------------------------------*/
 int
-hg_poll_get_fd(hg_poll_set_t *poll_set)
+hg_poll_get_fd(const hg_poll_set_t *poll_set)
 {
 #if defined(_WIN32)
     /* TODO */
@@ -199,6 +199,7 @@ hg_poll_add(hg_poll_set_t *poll_set, int fd, struct hg_poll_event *event)
 
 #if defined(_WIN32)
     /* TODO */
+    HG_UTIL_GOTO_ERROR(done, ret, HG_UTIL_FAIL, "Not implemented");
 #elif defined(HG_UTIL_HAS_SYSEPOLL_H)
     /* Translate flags */
     if (event->events & HG_POLLIN)
@@ -295,6 +296,7 @@ hg_poll_remove(hg_poll_set_t *poll_set, int fd)
 
 #if defined(_WIN32)
     /* TODO */
+    HG_UTIL_GOTO_ERROR(done, ret, HG_UTIL_FAIL, "Not implemented");
 #elif defined(HG_UTIL_HAS_SYSEPOLL_H)
     rc = epoll_ctl(poll_set->fd, EPOLL_CTL_DEL, fd, NULL);
     HG_UTIL_CHECK_ERROR(rc != 0, done, ret, HG_UTIL_FAIL,
@@ -350,7 +352,8 @@ hg_poll_wait(hg_poll_set_t *poll_set, unsigned int timeout,
     int ret = HG_UTIL_SUCCESS;
 
 #if defined(_WIN32)
-
+    HG_UTIL_GOTO_ERROR(done, ret, HG_UTIL_FAIL, "Not implemented");
+    (void) i;
 #elif defined(HG_UTIL_HAS_SYSEPOLL_H)
     nfds = epoll_wait(
         poll_set->fd, poll_set->events, max_poll_events, (int) timeout);

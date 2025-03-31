@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -13,45 +14,47 @@
 /* Public Type and Struct Definition */
 /*************************************/
 
-#if defined(__GNUC__) || defined(_WIN32)
-#    pragma pack(push, 1)
+#ifdef HG_HAS_CHECKSUMS
+HG_PACKED(union hg_core_header_hash {
+    uint16_t header; /* Header checksum (16-bits checksum) */
+    uint32_t pad;
+});
+
+HG_PACKED(struct hg_core_header_request {
+    uint8_t hg;                     /* Mercury identifier */
+    uint8_t protocol;               /* Version number */
+    uint64_t id;                    /* RPC request identifier */
+    uint8_t flags;                  /* Flags */
+    uint8_t cookie;                 /* Cookie */
+    union hg_core_header_hash hash; /* Hash */
+    /* 128 bits here */
+});
+
+HG_PACKED(struct hg_core_header_response {
+    int8_t ret_code;                /* Return code */
+    uint8_t flags;                  /* Flags */
+    uint16_t cookie;                /* Cookie */
+    uint64_t pad;                   /* Pad */
+    union hg_core_header_hash hash; /* Hash */
+    /* 128 bits here */
+});
 #else
-#    warning                                                                   \
-        "Proc header struct padding may not be consistent across platforms."
-#endif
-#ifdef HG_HAS_CHECKSUMS
-union hg_core_header_hash {
-    hg_uint16_t header; /* Header checksum (16-bits checksum) */
-    hg_uint32_t pad;
-};
-#endif
-
-struct hg_core_header_request {
-    hg_uint8_t hg;       /* Mercury identifier */
-    hg_uint8_t protocol; /* Version number */
-    hg_uint64_t id;      /* RPC request identifier */
-    hg_uint8_t flags;    /* Flags */
-    hg_uint8_t cookie;   /* Cookie */
+HG_PACKED(struct hg_core_header_request {
+    uint8_t hg;       /* Mercury identifier */
+    uint8_t protocol; /* Version number */
+    uint64_t id;      /* RPC request identifier */
+    uint8_t flags;    /* Flags */
+    uint8_t cookie;   /* Cookie */
     /* 96 bits here */
-#ifdef HG_HAS_CHECKSUMS
-    union hg_core_header_hash hash; /* Hash */
-    /* 128 bits here */
-#endif
-};
+});
 
-struct hg_core_header_response {
-    hg_int8_t ret_code; /* Return code */
-    hg_uint8_t flags;   /* Flags */
-    hg_uint16_t cookie; /* Cookie */
-    hg_uint64_t pad;    /* Pad */
+HG_PACKED(struct hg_core_header_response {
+    int8_t ret_code; /* Return code */
+    uint8_t flags;   /* Flags */
+    uint16_t cookie; /* Cookie */
+    uint64_t pad;    /* Pad */
     /* 96 bits here */
-#ifdef HG_HAS_CHECKSUMS
-    union hg_core_header_hash hash; /* Hash */
-    /* 128 bits here */
-#endif
-};
-#if defined(__GNUC__) || defined(_WIN32)
-#    pragma pack(pop)
+});
 #endif
 
 /* Common header struct request/response */
@@ -61,7 +64,7 @@ struct hg_core_header {
         struct hg_core_header_response response;
     } msg;
 #ifdef HG_HAS_CHECKSUMS
-    void *checksum; /* Checksum of header */
+    struct mchecksum_object *checksum; /* Checksum of header */
 #endif
 };
 
@@ -128,19 +131,23 @@ hg_core_header_response_get_size(void)
  * Initialize RPC request header.
  *
  * \param hg_core_header [IN/OUT]   pointer to request header structure
+ * \param use_checksum [IN]         will checksum header data
  *
  */
 HG_PRIVATE void
-hg_core_header_request_init(struct hg_core_header *hg_core_header);
+hg_core_header_request_init(
+    struct hg_core_header *hg_core_header, bool use_checksum);
 
 /**
  * Initialize RPC response header.
  *
  * \param hg_core_header [IN/OUT]   pointer to response header structure
+ * \param use_checksum [IN]         will checksum header data
  *
  */
 HG_PRIVATE void
-hg_core_header_response_init(struct hg_core_header *hg_core_header);
+hg_core_header_response_init(
+    struct hg_core_header *hg_core_header, bool use_checksum);
 
 /**
  * Finalize RPC request header.

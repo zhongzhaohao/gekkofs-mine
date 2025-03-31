@@ -12,7 +12,7 @@ fi
 
 source $srcdir/tests/test-util.sh
 
-TMPOUT=$($MKTEMP --tmpdir test-XXXXXX)
+TMPOUT=$($MKTEMP test-XXXXXX)
 
 # start 1 server with 2 second wait, 8s timeout
 test_start_servers 1 2 10
@@ -22,7 +22,7 @@ sleep 1
 #####################
 
 # run client test
-run_to 10 tests/margo-test-client-timeout $svr1 &> $TMPOUT 
+run_to 20 tests/margo-test-client-timeout $svr1 &> $TMPOUT 
 if [ $? -ne 0 ]; then
     wait
     rm -rf $TMPOUT

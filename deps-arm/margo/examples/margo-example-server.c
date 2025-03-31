@@ -26,7 +26,8 @@ int main(int argc, char** argv)
     char                   addr_self_string[128];
     hg_size_t              addr_self_string_sz = 128;
     struct margo_init_info minfo               = {0};
-    char*                  starter_json        = "{\"output_dir\":\"/tmp\"}";
+    char*                  starter_json
+        = "{\"enable_abt_profiling\":true, \"output_dir\":\"/tmp\"}";
 
     if (argc != 2) {
         fprintf(stderr, "Usage: ./server <listen_addr>\n");
@@ -46,12 +47,6 @@ int main(int argc, char** argv)
         return (-1);
     }
 
-    /* Start diagnostics and profiling; they will be included in state dump
-     * later on during execution.
-     */
-    margo_diag_start(mid);
-    margo_profile_start(mid);
-
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);
     if (hret != HG_SUCCESS) {
@@ -70,7 +65,9 @@ int main(int argc, char** argv)
     margo_addr_free(mid, addr_self);
 
     fprintf(stderr, "# accepting RPCs on address \"%s\"\n", addr_self_string);
-    fprintf(stderr, "# connect to this server with \"./margo-example-client %s\"\n", addr_self_string);
+    fprintf(stderr,
+            "# connect to this server with \"./margo-example-client %s\"\n",
+            addr_self_string);
 
     /* register RPC */
     MARGO_REGISTER(mid, "my_rpc", my_rpc_in_t, my_rpc_out_t, my_rpc_ult);

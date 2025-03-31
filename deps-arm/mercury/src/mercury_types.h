@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -27,13 +28,28 @@ struct hg_info {
     hg_context_t *context; /* HG context */
     hg_addr_t addr;        /* HG address at target/origin */
     hg_id_t id;            /* RPC ID */
-    hg_uint8_t context_id; /* Context ID at target/origin */
+    uint8_t context_id;    /* Context ID at target/origin */
+};
+
+/* Bulk attributes */
+typedef enum hg_mem_type {
+    HG_MEM_TYPE_HOST = NA_MEM_TYPE_HOST, /*!< Default system memory */
+    HG_MEM_TYPE_CUDA = NA_MEM_TYPE_CUDA, /*!< NVIDIA CUDA memory */
+    HG_MEM_TYPE_ROCM = NA_MEM_TYPE_ROCM, /*!< AMD ROCM memory */
+    HG_MEM_TYPE_ZE = NA_MEM_TYPE_ZE,     /*!< Intel Level Zero memory */
+    HG_MEM_TYPE_MAX = NA_MEM_TYPE_MAX,
+    HG_MEM_TYPE_UNKNOWN = NA_MEM_TYPE_UNKNOWN
+} hg_mem_type_t;
+
+struct hg_bulk_attr {
+    hg_mem_type_t mem_type; /*!< Memory type */
+    uint64_t device;        /*!< Optional device ID */
 };
 
 /**
  * Bulk transfer operators.
  */
-typedef enum {
+typedef enum hg_bulk_op {
     HG_BULK_PUSH, /*!< push data to origin */
     HG_BULK_PULL  /*!< pull data from origin */
 } hg_bulk_op_t;

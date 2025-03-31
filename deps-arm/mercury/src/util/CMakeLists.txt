@@ -1,8 +1,49 @@
+project(MERCURY_UTIL C)
+
+#------------------------------------------------------------------------------
+# Setup install directories and cmake module
+#------------------------------------------------------------------------------
+if(NOT MERCURY_UTIL_INSTALL_BIN_DIR)
+  set(MERCURY_UTIL_INSTALL_BIN_DIR ${CMAKE_INSTALL_PREFIX}/bin)
+endif()
+if(NOT MERCURY_UTIL_INSTALL_LIB_DIR)
+  set(MERCURY_UTIL_INSTALL_LIB_DIR ${CMAKE_INSTALL_PREFIX}/lib)
+endif()
+if(NOT MERCURY_UTIL_INSTALL_INCLUDE_DIR)
+  # Interface include will default to prefix/include
+  set(MERCURY_UTIL_INSTALL_INCLUDE_INTERFACE include)
+  set(MERCURY_UTIL_INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_PREFIX}/include)
+else()
+  set(MERCURY_UTIL_INSTALL_INCLUDE_INTERFACE ${MERCURY_UTIL_INSTALL_INCLUDE_DIR})
+endif()
+if(NOT MERCURY_UTIL_INSTALL_DATA_DIR)
+  set(MERCURY_UTIL_INSTALL_DATA_DIR ${CMAKE_INSTALL_PREFIX}/share)
+endif()
+
 #------------------------------------------------------------------------------
 # Setup cmake module
 #------------------------------------------------------------------------------
-#set(MERCURY_UTIL_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
-#set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${MERCURY_UTIL_CMAKE_DIR})
+set(MERCURY_UTIL_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/CMake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${MERCURY_UTIL_CMAKE_DIR})
+
+#------------------------------------------------------------------------------
+# Version information
+#------------------------------------------------------------------------------
+# Hard-coded version variables are read-in from a separate file. This makes it
+# easier to have a script to update version numbers automatically.
+file(STRINGS version.txt version_txt)
+extract_version_components("${version_txt}" "${PROJECT_NAME}")
+set(MERCURY_UTIL_PACKAGE "mercury_util")
+set(MERCURY_UTIL_PACKAGE_DESCRIPTION "Mercury Util Library")
+message(STATUS "${MERCURY_UTIL_PACKAGE} v${MERCURY_UTIL_VERSION_FULL}")
+
+#-----------------------------------------------------------------------------
+# Targets built within this project are exported at Install time for use
+# by other projects.
+#-----------------------------------------------------------------------------
+if(NOT MERCURY_UTIL_EXPORTED_TARGETS)
+  set(MERCURY_UTIL_EXPORTED_TARGETS "${MERCURY_UTIL_PACKAGE}-targets")
+endif()
 
 #------------------------------------------------------------------------------
 # Include source and build directories
@@ -27,6 +68,12 @@ check_c_source_compiles(
   int main(void) {return 0;}
   "
   HG_UTIL_HAS_ATTR_CONSTRUCTOR_PRIORITY
+)
+
+# DL
+set(MERCURY_UTIL_EXT_LIB_DEPENDENCIES
+  ${MERCURY_UTIL_EXT_LIB_DEPENDENCIES}
+  ${CMAKE_DL_LIBS}
 )
 
 # Threads
@@ -60,7 +107,7 @@ endif()
 if(NOT WIN32 AND NOT APPLE)
   set(MERCURY_UTIL_EXT_LIB_DEPENDENCIES
     ${MERCURY_UTIL_EXT_LIB_DEPENDENCIES}
-    -lrt
+    rt
   )
 endif()
 
@@ -100,6 +147,12 @@ endif()
 
 # Detect <sys/event.h>
 check_include_files("sys/event.h" HG_UTIL_HAS_SYSEVENT_H)
+
+# Detect <sys/param.h>
+check_include_files("sys/param.h" HG_UTIL_HAS_SYSPARAM_H)
+
+# Detect <sys/queue.h>
+check_include_files("sys/queue.h" HG_UTIL_HAS_SYSQUEUE_H)
 
 # Atomics
 if(NOT WIN32)
@@ -164,15 +217,18 @@ set(MERCURY_UTIL_PUBLIC_HEADERS
   ${CMAKE_CURRENT_BINARY_DIR}/mercury_util_config.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_atomic.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_atomic_queue.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/mercury_byteswap.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_compiler_attributes.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/mercury_dl.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_dlog.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_event.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_hash_string.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_hash_table.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/mercury_list.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/mercury_inet.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_log.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_mem.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_mem_pool.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/mercury_param.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_poll.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_queue.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_request.h
@@ -187,6 +243,13 @@ set(MERCURY_UTIL_PUBLIC_HEADERS
   ${CMAKE_CURRENT_SOURCE_DIR}/mercury_util.h
 )
 
+if(NOT HG_UTIL_HAS_SYSQUEUE_H)
+  set(MERCURY_UTIL_PUBLIC_HEADERS
+    ${MERCURY_UTIL_PUBLIC_HEADERS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mercury_sys_queue.h
+  )
+endif()
+
 #------------------------------------------------------------------------------
 # Specify project private header files
 #------------------------------------------------------------------------------
@@ -199,11 +262,7 @@ set(MERCURY_UTIL_PRIVATE_HEADERS
 #----------------------------------------------------------------------------
 
 # Clean up system include path first
-foreach(item ${MERCURY_SYSTEM_INCLUDE_PATH})
-  if(MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES)
-    list(REMOVE_ITEM MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES ${item})
-  endif()
-endforeach()
+mercury_clean_include_path(MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES)
 
 # UTIL
 add_library(mercury_util ${MERCURY_UTIL_SRCS}
@@ -219,8 +278,9 @@ target_include_directories(mercury_util
 target_include_directories(mercury_util
   SYSTEM PUBLIC ${MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES}
 )
-target_link_libraries(mercury_util ${MERCURY_UTIL_EXT_LIB_DEPENDENCIES})
-mercury_set_lib_options(mercury_util "mercury_util" ${MERCURY_UTIL_LIBTYPE})
+target_link_libraries(mercury_util PUBLIC ${MERCURY_UTIL_EXT_LIB_DEPENDENCIES})
+mercury_set_lib_options(mercury_util "mercury_util"
+                        ${MERCURY_UTIL_LIBTYPE} ${PROJECT_NAME})
 if(MERCURY_ENABLE_COVERAGE)
   set_coverage_flags(mercury_util)
 endif()
@@ -235,15 +295,41 @@ install(
   TARGETS
     mercury_util
   EXPORT
-    ${MERCURY_EXPORTED_TARGETS}
-  LIBRARY DESTINATION ${MERCURY_INSTALL_LIB_DIR}
-  ARCHIVE DESTINATION ${MERCURY_INSTALL_LIB_DIR}
-  PUBLIC_HEADER DESTINATION ${MERCURY_INSTALL_INCLUDE_DIR}
-  RUNTIME DESTINATION ${MERCURY_INSTALL_BIN_DIR}
+    ${MERCURY_UTIL_EXPORTED_TARGETS}
+  LIBRARY DESTINATION ${MERCURY_UTIL_INSTALL_LIB_DIR}
+  ARCHIVE DESTINATION ${MERCURY_UTIL_INSTALL_LIB_DIR}
+  PUBLIC_HEADER DESTINATION ${MERCURY_UTIL_INSTALL_INCLUDE_DIR}
+  RUNTIME DESTINATION ${MERCURY_UTIL_INSTALL_BIN_DIR}
 )
 
-#------------------------------------------------------------------------------
-# Set variables for parent scope
-#------------------------------------------------------------------------------
-set(MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES ${MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES} PARENT_SCOPE)
-set(MERCURY_UTIL_EXT_LIB_DEPENDENCIES ${MERCURY_UTIL_EXT_LIB_DEPENDENCIES} PARENT_SCOPE)
+#-----------------------------------------------------------------------------
+# For automake compatibility, also provide a pkgconfig file
+#-----------------------------------------------------------------------------
+if(NOT WIN32)
+  # Retrieve util library
+  mercury_get_pc_lib_name(MERCURY_UTIL_PC_LIBRARY mercury_util)
+
+  # Mercury util external library dependencies
+  mercury_get_pc_lib_deps(MERCURY_UTIL_PC_LIB_DEPENDENCIES "${MERCURY_UTIL_EXT_LIB_DEPENDENCIES}")
+
+  # External include dependencies
+  if(MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES)
+    list(REMOVE_DUPLICATES MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES)
+    mercury_get_pc_inc_deps(MERCURY_UTIL_PC_INCLUDE_DEPENDENCIES "${MERCURY_UTIL_EXT_INCLUDE_DEPENDENCIES}")
+  endif()
+
+  # Configure pkg-config file
+  configure_file(
+    ${MERCURY_UTIL_SOURCE_DIR}/CMake/${MERCURY_UTIL_PACKAGE}.pc.in
+    ${MERCURY_UTIL_BINARY_DIR}/CMakeFiles/${MERCURY_UTIL_PACKAGE}.pc @ONLY
+  )
+
+  # Install pkg-config file
+  install(
+    FILES
+      ${MERCURY_UTIL_BINARY_DIR}/CMakeFiles/${MERCURY_UTIL_PACKAGE}.pc
+    DESTINATION
+      ${MERCURY_UTIL_INSTALL_LIB_DIR}/pkgconfig
+  )
+
+endif()

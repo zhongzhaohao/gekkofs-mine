@@ -1,11 +1,13 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "mercury_mem.h"
 
+#include "mercury_atomic.h"
 #include "mercury_util_error.h"
 
 #ifdef _WIN32
@@ -26,19 +28,59 @@
 long
 hg_mem_get_page_size(void)
 {
-    static long page_size = 0;
+    static hg_atomic_int64_t atomic_page_size = HG_ATOMIC_VAR_INIT(0);
+    long page_size = (long) hg_atomic_get64(&atomic_page_size);
 
-    if (page_size == 0) {
+    if (page_size != 0)
+        return page_size;
+
 #ifdef _WIN32
-        SYSTEM_INFO system_info;
-        GetSystemInfo(&system_info);
-        page_size = system_info.dwPageSize;
+    SYSTEM_INFO system_info;
+    GetSystemInfo(&system_info);
+    page_size = system_info.dwPageSize;
 #else
-        page_size = sysconf(_SC_PAGE_SIZE);
+    page_size = sysconf(_SC_PAGE_SIZE);
 #endif
-    }
 
+    hg_atomic_set64(&atomic_page_size, page_size);
     return page_size;
+}
+
+/*---------------------------------------------------------------------------*/
+long
+hg_mem_get_hugepage_size(void)
+{
+#if !defined(_WIN32) && !defined(__APPLE__)
+    FILE *fd;
+    char *line = NULL;
+    size_t len = 0;
+#endif
+    static hg_atomic_int64_t atomic_page_size = HG_ATOMIC_VAR_INIT(0);
+    long page_size = (long) hg_atomic_get64(&atomic_page_size);
+
+    if (page_size != 0)
+        return page_size;
+
+#if defined(_WIN32) || defined(__APPLE__)
+    HG_UTIL_CHECK_ERROR_NORET(1, error, "not implemented");
+#else
+    fd = fopen("/proc/meminfo", "r");
+    HG_UTIL_CHECK_ERROR_NORET(
+        fd == NULL, error, "fopen() failed (%s)", strerror(errno));
+
+    while (getline(&line, &len, fd) != -1)
+        if (sscanf(line, "Hugepagesize: %ld kB", &page_size) == 1)
+            break;
+    free(line);
+    fclose(fd);
+    page_size *= 1024;
+#endif
+
+    hg_atomic_set64(&atomic_page_size, page_size);
+    return page_size;
+
+error:
+    return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -60,6 +102,50 @@ hg_mem_aligned_alloc(size_t alignment, size_t size)
 #endif
 
     return mem_ptr;
+}
+
+/*---------------------------------------------------------------------------*/
+void *
+hg_mem_huge_alloc(size_t size)
+{
+    void *mem_ptr = NULL;
+
+#if defined(_WIN32) || defined(__APPLE__)
+    (void) size;
+    HG_UTIL_CHECK_ERROR_NORET(1, error, "not implemented");
+#else
+    mem_ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+    HG_UTIL_CHECK_ERROR_NORET(
+        mem_ptr == MAP_FAILED, error, "mmap() failed (%s)", strerror(errno));
+#endif
+
+    return mem_ptr;
+
+error:
+    return NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+int
+hg_mem_huge_free(void *mem_ptr, size_t size)
+{
+    int ret;
+
+#if defined(_WIN32) || defined(__APPLE__)
+    (void) mem_ptr;
+    (void) size;
+    HG_UTIL_CHECK_ERROR(1, error, ret, HG_UTIL_FAIL, "not implemented");
+#else
+    int rc = munmap(mem_ptr, size);
+    HG_UTIL_CHECK_ERROR(rc != 0, error, ret, HG_UTIL_FAIL,
+        "munmap() failed (%s)", strerror(errno));
+#endif
+
+    return HG_UTIL_SUCCESS;
+
+error:
+    return ret;
 }
 
 /*---------------------------------------------------------------------------*/

@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -14,7 +15,7 @@ hg_event_create(void)
 {
     int fd = -1;
 #if defined(_WIN32)
-
+    HG_UTIL_GOTO_ERROR(done, fd, -1, "Not implemented");
 #elif defined(HG_UTIL_HAS_SYSEVENTFD_H)
     /* Create local signal event on self address */
     fd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
@@ -56,11 +57,11 @@ error:
 int
 hg_event_destroy(int fd)
 {
-    int ret = HG_UTIL_SUCCESS, rc;
+    int ret = HG_UTIL_SUCCESS;
 #if defined(_WIN32)
-
+    HG_UTIL_GOTO_ERROR(done, ret, HG_UTIL_FAIL, "Not implemented");
 #else
-    rc = close(fd);
+    int rc = close(fd);
     HG_UTIL_CHECK_ERROR(rc == -1, done, ret, HG_UTIL_FAIL,
         "close() failed (%s)", strerror(errno));
 #endif

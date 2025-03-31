@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -49,6 +50,8 @@
 #        define cpu_spinwait _mm_pause
 #    elif defined(__arm__)
 #        define cpu_spinwait() __asm__ __volatile__("yield")
+#    elif defined(__aarch64__)
+#        define cpu_spinwait() __asm__ __volatile__("isb")
 #    else
 #        warning "Processor yield is not supported on this architecture."
 #        define cpu_spinwait(x)
@@ -141,7 +144,7 @@ hg_atomic_queue_pop_sc(struct hg_atomic_queue *hg_atomic_queue);
  * \return true if empty, false if not
  */
 static HG_UTIL_INLINE bool
-hg_atomic_queue_is_empty(struct hg_atomic_queue *hg_atomic_queue);
+hg_atomic_queue_is_empty(const struct hg_atomic_queue *hg_atomic_queue);
 
 /**
  * Determine number of entries in a queue.
@@ -151,7 +154,7 @@ hg_atomic_queue_is_empty(struct hg_atomic_queue *hg_atomic_queue);
  * \return Number of entries queued or 0 if none
  */
 static HG_UTIL_INLINE unsigned int
-hg_atomic_queue_count(struct hg_atomic_queue *hg_atomic_queue);
+hg_atomic_queue_count(const struct hg_atomic_queue *hg_atomic_queue);
 
 /*---------------------------------------------------------------------------*/
 static HG_UTIL_INLINE int
@@ -250,7 +253,7 @@ hg_atomic_queue_pop_sc(struct hg_atomic_queue *hg_atomic_queue)
 
 /*---------------------------------------------------------------------------*/
 static HG_UTIL_INLINE bool
-hg_atomic_queue_is_empty(struct hg_atomic_queue *hg_atomic_queue)
+hg_atomic_queue_is_empty(const struct hg_atomic_queue *hg_atomic_queue)
 {
     return (hg_atomic_get32(&hg_atomic_queue->cons_head) ==
             hg_atomic_get32(&hg_atomic_queue->prod_tail));
@@ -258,7 +261,7 @@ hg_atomic_queue_is_empty(struct hg_atomic_queue *hg_atomic_queue)
 
 /*---------------------------------------------------------------------------*/
 static HG_UTIL_INLINE unsigned int
-hg_atomic_queue_count(struct hg_atomic_queue *hg_atomic_queue)
+hg_atomic_queue_count(const struct hg_atomic_queue *hg_atomic_queue)
 {
     return ((hg_atomic_queue->prod_size +
                 (unsigned int) hg_atomic_get32(&hg_atomic_queue->prod_tail) -

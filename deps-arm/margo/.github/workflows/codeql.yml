@@ -1,0 +1,56 @@
+name: CodeQL analysis
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  codeql:
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup spack
+      uses: spack/setup-spack@v2.1.1
+      with:
+        ref: develop
+
+    - name: Add mochi-spack-packages
+      run: |
+        git clone https://github.com/mochi-hpc/mochi-spack-packages
+        spack -e tests repo add mochi-spack-packages
+
+    - name: Install spack environment
+      run: |
+        spack -e tests install
+
+    - name: Show spack-installed packages for debugging
+      run: |
+        spack -e tests find -dlv
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v1
+      with:
+        languages: cpp
+        queries: security-and-quality
+
+    - name: Build code and run unit tests
+      run: |
+        eval `spack env activate --sh tests`
+        ./prepare.sh
+        ./configure --prefix=`pwd`
+        make
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2

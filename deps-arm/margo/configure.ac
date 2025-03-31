@@ -2,7 +2,23 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([margo], [0.9.6], [],[],[])
+
+# IMPORTANT: when editing the version  number, edit both the
+# MARGO_VERSION_ variables and the argument provided to AC_INIT
+AC_INIT([margo], [0.18.3], [],[],[])
+
+MARGO_VERSION_MAJOR=0
+MARGO_VERSION_MINOR=18
+MARGO_VERSION_PATCH=3
+MARGO_VERSION="$MARGO_VERSION_MAJOR.$MARGO_VERSION_MINOR.$MARGO_VERSION_PATCH"
+MARGO_VERSION_NUM=$((MARGO_VERSION_MAJOR*100000+MARGO_VERSION_MINOR*100+MARGO_VERSION_PATCH))
+
+AC_SUBST([MARGO_VERSION], ["$MARGO_VERSION"])
+AC_SUBST([MARGO_VERSION_MAJOR], ["$MARGO_VERSION_MAJOR"])
+AC_SUBST([MARGO_VERSION_MINOR], ["$MARGO_VERSION_MINOR"])
+AC_SUBST([MARGO_VERSION_PATCH], ["$MARGO_VERSION_PATCH"])
+AC_SUBST([MARGO_VERSION_NUM], ["$MARGO_VERSION_NUM"])
+
 AC_CONFIG_MACRO_DIR([m4])
 LT_INIT
 
@@ -16,7 +32,7 @@ AM_INIT_AUTOMAKE([foreign subdir-objects -Wall])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_CONFIG_SRCDIR([README.md])
-AC_CONFIG_HEADERS([margo-config.h])
+AC_CONFIG_HEADERS([margo-config-private.h])
 
 # Checks for programs.
 AC_PROG_CC
@@ -54,6 +70,18 @@ AC_REQUIRE_CPP
 AC_CHECK_SIZEOF([long int])
 
 dnl
+dnl margo relies on pthreads because of prio_pool implementation and
+dnl argobots profiling shim
+dnl
+AX_PTHREAD([],
+    [AC_MSG_ERROR([Could not find working pthreads])])
+LIBS="$PTHREAD_LIBS $LIBS"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+dnl subst for .pc file generation
+AC_SUBST([PTHREAD_LIBS], ["$PTHREAD_LIBS"])
+AC_SUBST([PTHREAD_CFLAGS], ["$PTHREAD_CFLAGS"])
+
+dnl
 dnl Verify pkg-config
 dnl
 PKG_PROG_PKG_CONFIG
@@ -70,7 +98,7 @@ CFLAGS="$MERCURY_CFLAGS $CFLAGS"
 MERCURY_LIB_PATH=`pkg-config --libs-only-L mercury | sed -e 's/-L//g'`
 AC_SUBST([MERCURY_LIB_PATH], ["$MERCURY_LIB_PATH"])
 
-PKG_CHECK_MODULES([ARGOBOTS],[argobots],[],
+PKG_CHECK_MODULES([ARGOBOTS],[argobots >= 1.1],[],
    [AC_MSG_ERROR([Could not find working argobots installation!])])
 LIBS="$ARGOBOTS_LIBS $LIBS"
 CPPFLAGS="$ARGOBOTS_CFLAGS $CPPFLAGS"
@@ -121,6 +149,39 @@ AC_MSG_RESULT(no)
 AC_MSG_ERROR([ABT_SCHED_BASIC_WAIT not available in Argobots])
 )
 
+# check if this version of Argobots supports querying lazy stack allocation
+# status
+AC_MSG_CHECKING(for ABT_INFO_QUERY_KIND_ENABLED_LAZY_STACK_ALLOC in Argobots)
+AC_TRY_COMPILE([
+#include <abt.h>
+], [
+enum ABT_info_query_kind query_kind = ABT_INFO_QUERY_KIND_ENABLED_LAZY_STACK_ALLOC;
+],
+AC_MSG_RESULT(yes)
+AC_DEFINE(HAVE_ABT_INFO_QUERY_KIND_ENABLED_LAZY_STACK_ALLOC, 1, [can query lazy stack alloc support]),
+AC_MSG_RESULT(no)
+)
+
+# check if this version of Argobots supports ABT_pool_pop_threads
+AC_CHECK_FUNC(ABT_pool_pop_threads,
+AC_DEFINE(HAVE_ABT_POOL_POP_THREADS, 1, [can use ABT_pool_pop_threads]),
+[]
+)
+
+# check if dl_iterate_phdr() is available
+AC_MSG_CHECKING(for dl_iterate_phdr)
+AC_TRY_LINK([
+#define _GNU_SOURCE
+#include <link.h>
+#include <stdio.h>
+], [
+dl_iterate_phdr(NULL, NULL);
+],
+AC_MSG_RESULT(yes)
+AC_DEFINE(HAVE_DL_ITERATE_PHDR, 1, [dl_iterate_phdr function is available]),
+AC_MSG_RESULT(no)
+)
+
 AC_ARG_ENABLE(coverage,
               [AS_HELP_STRING([--enable-coverage],[Enable code coverage @<:@default=no@:>@])],
               [case "${enableval}" in
@@ -136,5 +197,7 @@ if test "$enable_coverage" = "yes" ; then
     LDFLAGS="--coverage -lgcov"
 fi
 
-AC_CONFIG_FILES([Makefile maint/margo.pc])
+AC_CONFIG_LINKS([tests/unit-tests/test-configs.json:tests/unit-tests/test-configs.json])
+
+AC_CONFIG_FILES([Makefile maint/margo.pc maint/margo-hg-shim.pc include/margo-version.h])
 AC_OUTPUT

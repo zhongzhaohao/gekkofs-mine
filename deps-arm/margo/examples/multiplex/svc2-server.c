@@ -28,14 +28,14 @@ static void svc2_do_thing_ult(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
     hgi = margo_get_info(handle);
     assert(hgi);
-    mid = margo_hg_info_get_instance(hgi);
+    mid = margo_hg_handle_get_instance(handle);
     assert(mid != MARGO_INSTANCE_NULL);
 
     ABT_xstream_self(&my_xstream);
     ABT_thread_self(&my_ult);
     my_tid = pthread_self();
-    printf("svc2: do_thing: ult: %p, xstream %p, tid: %lu\n", my_ult,
-           my_xstream, my_tid);
+    printf("svc2: do_thing: ult: %p, xstream %p, tid: %lu\n", (void*)my_ult,
+           (void*)my_xstream, my_tid);
 
     out.ret = 0;
 
@@ -85,14 +85,14 @@ static void svc2_do_other_thing_ult(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
     hgi = margo_get_info(handle);
     assert(hgi);
-    mid = margo_hg_info_get_instance(hgi);
+    mid = margo_hg_handle_get_instance(handle);
     assert(mid != MARGO_INSTANCE_NULL);
 
     ABT_xstream_self(&my_xstream);
     ABT_thread_self(&my_ult);
     my_tid = pthread_self();
-    printf("svc2: do_other_thing: ult: %p, xstream %p, tid: %lu\n", my_ult,
-           my_xstream, my_tid);
+    printf("svc2: do_other_thing: ult: %p, xstream %p, tid: %lu\n",
+           (void*)my_ult, (void*)my_xstream, my_tid);
 
     out.ret = 0;
 
@@ -138,6 +138,9 @@ int svc2_register(margo_instance_id mid, ABT_pool pool, uint32_t provider_id)
 
 void svc2_deregister(margo_instance_id mid, ABT_pool pool, uint32_t provider_id)
 {
+    (void)mid;
+    (void)pool;
+    (void)provider_id;
     /* TODO: undo what was done in svc2_register() */
     return;
 }

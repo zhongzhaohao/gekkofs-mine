@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -28,7 +29,7 @@ struct hg_core_info {
     hg_core_context_t *context;  /* HG core context */
     hg_core_addr_t addr;         /* HG address at target/origin */
     hg_id_t id;                  /* RPC ID */
-    hg_uint8_t context_id;       /* Context ID at target/origin */
+    uint8_t context_id;          /* Context ID at target/origin */
 };
 
 /* Callback info structs */
@@ -71,8 +72,7 @@ typedef hg_return_t (*hg_core_cb_t)(
 #define HG_CORE_OP_ID_IGNORE ((hg_core_op_id_t *) 1)
 
 /* Flags */
-#define HG_CORE_MORE_DATA   (1 << 0) /* More data required */
-#define HG_CORE_NO_RESPONSE (1 << 1) /* No response required */
+#define HG_CORE_MORE_DATA (1 << 0) /* More data required */
 
 /*********************/
 /* Public Prototypes */
@@ -81,6 +81,29 @@ typedef hg_return_t (*hg_core_cb_t)(
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * Get information on protocols that are supported by underlying NA plugins. If
+ * \info_string is NULL, a list of all supported protocols by all plugins will
+ * be returned. The returned list must be freed using
+ * HG_Core_free_na_protocol_info().
+ *
+ * \param info_string [IN]          NULL or "<protocol>" or "<plugin+protocol>"
+ * \param na_protocol_info_p [OUT]  linked-list of protocol infos
+ *
+ * \return HG_SUCCESS or corresponding NA error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_get_na_protocol_info(
+    const char *info_string, struct na_protocol_info **na_protocol_info_p);
+
+/**
+ * Free protocol info.
+ *
+ * \param na_protocol_info [IN/OUT] linked-list of protocol infos
+ */
+HG_PUBLIC void
+HG_Core_free_na_protocol_info(struct na_protocol_info *na_protocol_info);
 
 /**
  * Initialize the core Mercury layer.
@@ -94,11 +117,13 @@ extern "C" {
  * \return Pointer to HG core class or NULL in case of failure
  */
 HG_PUBLIC hg_core_class_t *
-HG_Core_init(const char *na_info_string, hg_bool_t na_listen);
+HG_Core_init(
+    const char *na_info_string, uint8_t na_listen) HG_WARN_UNUSED_RESULT;
 
 /**
  * Initialize the Mercury layer with options provided by init_info.
- * Must be finalized with HG_Core_finalize().
+ * Must be finalized with HG_Core_finalize(). Using this routine limits the info
+ * struct version to 2.2 version.
  * \remark HG_Core_init_opt() may become HG_Core_init() in the future.
  *
  * \param na_info_string [IN]   host address with port number (e.g.,
@@ -110,8 +135,27 @@ HG_Core_init(const char *na_info_string, hg_bool_t na_listen);
  * \return Pointer to HG core class or NULL in case of failure
  */
 HG_PUBLIC hg_core_class_t *
-HG_Core_init_opt(const char *na_info_string, hg_bool_t na_listen,
-    const struct hg_init_info *hg_init_info);
+HG_Core_init_opt(const char *na_info_string, uint8_t na_listen,
+    const struct hg_init_info *hg_init_info) HG_WARN_UNUSED_RESULT;
+
+/**
+ * Initialize the Mercury layer with options provided by init_info.
+ * Must be finalized with HG_Core_finalize().
+ * \remark HG_Core_init_opt() may become HG_Core_init() in the future.
+ *
+ * \param na_info_string [IN]   host address with port number (e.g.,
+ *                              "tcp://localhost:3344" or
+ *                              "bmi+tcp://localhost:3344")
+ * \param na_listen [IN]        listen for incoming connections
+ * \param version [IN]          API version of the init info struct
+ * \param hg_init_info [IN]     (Optional) HG init info, NULL if no info
+ *
+ * \return Pointer to HG core class or NULL in case of failure
+ */
+HG_PUBLIC hg_core_class_t *
+HG_Core_init_opt2(const char *na_info_string, uint8_t na_listen,
+    unsigned int version,
+    const struct hg_init_info *hg_init_info) HG_WARN_UNUSED_RESULT;
 
 /**
  * Finalize the Mercury layer.
@@ -150,7 +194,7 @@ HG_Core_cleanup(void);
 HG_PUBLIC hg_return_t
 HG_Core_set_more_data_callback(struct hg_core_class *hg_core_class,
     hg_return_t (*more_data_acquire_callback)(hg_core_handle_t, hg_op_t,
-        hg_return_t (*done_callback)(hg_core_handle_t)),
+        void (*done_callback)(hg_core_handle_t, hg_return_t)),
     void (*more_data_release_callback)(hg_core_handle_t));
 
 /**
@@ -161,7 +205,8 @@ HG_Core_set_more_data_callback(struct hg_core_class *hg_core_class,
  * \return the name of the class, or NULL if not a valid class
  */
 static HG_INLINE const char *
-HG_Core_class_get_name(const hg_core_class_t *hg_core_class);
+HG_Core_class_get_name(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 
 /**
  * Obtain the protocol of the given class.
@@ -171,17 +216,19 @@ HG_Core_class_get_name(const hg_core_class_t *hg_core_class);
  * \return the protocol of the class, or NULL if not a valid class
  */
 static HG_INLINE const char *
-HG_Core_class_get_protocol(const hg_core_class_t *hg_core_class);
+HG_Core_class_get_protocol(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 
 /**
  * Test whether class is listening or not.
  *
  * \param hg_core_class [IN]    pointer to HG core class
  *
- * \return HG_TRUE if listening or HG_FALSE if not, or not a valid class
+ * \return true if listening or false if not, or not a valid class
  */
-static HG_INLINE hg_bool_t
-HG_Core_class_is_listening(const hg_core_class_t *hg_core_class);
+static HG_INLINE bool
+HG_Core_class_is_listening(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 
 /**
  * Obtain the underlying NA class.
@@ -191,7 +238,8 @@ HG_Core_class_is_listening(const hg_core_class_t *hg_core_class);
  * \return Pointer to NA class or NULL if not a valid class
  */
 static HG_INLINE na_class_t *
-HG_Core_class_get_na(const hg_core_class_t *hg_core_class);
+HG_Core_class_get_na(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 
 #ifdef NA_HAS_SM
 /**
@@ -202,7 +250,8 @@ HG_Core_class_get_na(const hg_core_class_t *hg_core_class);
  * \return Pointer to NA SM class or NULL if not a valid class
  */
 static HG_INLINE na_class_t *
-HG_Core_class_get_na_sm(const hg_core_class_t *hg_core_class);
+HG_Core_class_get_na_sm(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 #endif
 
 /**
@@ -214,7 +263,8 @@ HG_Core_class_get_na_sm(const hg_core_class_t *hg_core_class);
  * XDR is being used
  */
 static HG_INLINE hg_size_t
-HG_Core_class_get_input_eager_size(const hg_core_class_t *hg_core_class);
+HG_Core_class_get_input_eager_size(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 
 /**
  * Obtain the maximum eager size for sending RPC outputs.
@@ -225,7 +275,8 @@ HG_Core_class_get_input_eager_size(const hg_core_class_t *hg_core_class);
  * is being used
  */
 static HG_INLINE hg_size_t
-HG_Core_class_get_output_eager_size(const hg_core_class_t *hg_core_class);
+HG_Core_class_get_output_eager_size(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 
 /**
  * Associate user data to class. When HG_Core_finalize() is called,
@@ -249,7 +300,21 @@ HG_Core_class_set_data(
  * \return Pointer to user data or NULL if not set or any error has occurred
  */
 static HG_INLINE void *
-HG_Core_class_get_data(const hg_core_class_t *hg_core_class);
+HG_Core_class_get_data(
+    const hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
+
+/**
+ * Get diagnostic counters associated to HG core class.
+ * (Requires debug enabled build)
+ *
+ * \param hg_core_class [IN]        pointer to HG core class
+ * \param diag_counters [IN/OUT]    pointer to counters struct
+ *
+ * \return HG_SUCCESS or corresponding HG error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_class_get_counters(const hg_core_class_t *hg_core_class,
+    struct hg_diag_counters *diag_counters);
 
 /**
  * Create a new context. Must be destroyed by calling HG_Core_context_destroy().
@@ -259,7 +324,7 @@ HG_Core_class_get_data(const hg_core_class_t *hg_core_class);
  * \return Pointer to HG core context or NULL in case of failure
  */
 HG_PUBLIC hg_core_context_t *
-HG_Core_context_create(hg_core_class_t *hg_core_class);
+HG_Core_context_create(hg_core_class_t *hg_core_class) HG_WARN_UNUSED_RESULT;
 
 /**
  * Create a new context with a user-defined context identifier. The context
@@ -273,7 +338,8 @@ HG_Core_context_create(hg_core_class_t *hg_core_class);
  * \return Pointer to HG core context or NULL in case of failure
  */
 HG_PUBLIC hg_core_context_t *
-HG_Core_context_create_id(hg_core_class_t *hg_core_class, hg_uint8_t id);
+HG_Core_context_create_id(
+    hg_core_class_t *hg_core_class, uint8_t id) HG_WARN_UNUSED_RESULT;
 
 /**
  * Destroy a context created by HG_Core_context_create().
@@ -293,7 +359,8 @@ HG_Core_context_destroy(hg_core_context_t *context);
  * \return the associated class
  */
 static HG_INLINE hg_core_class_t *
-HG_Core_context_get_class(const hg_core_context_t *context);
+HG_Core_context_get_class(
+    const hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
 
 /**
  * Retrieve the underlying NA context.
@@ -303,7 +370,7 @@ HG_Core_context_get_class(const hg_core_context_t *context);
  * \return the associated context
  */
 static HG_INLINE na_context_t *
-HG_Core_context_get_na(const hg_core_context_t *context);
+HG_Core_context_get_na(const hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
 
 #ifdef NA_HAS_SM
 /**
@@ -314,7 +381,8 @@ HG_Core_context_get_na(const hg_core_context_t *context);
  * \return the associated context
  */
 static HG_INLINE na_context_t *
-HG_Core_context_get_na_sm(const hg_core_context_t *context);
+HG_Core_context_get_na_sm(
+    const hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
 #endif
 
 /**
@@ -324,8 +392,8 @@ HG_Core_context_get_na_sm(const hg_core_context_t *context);
  *
  * \return Non-negative integer (max value of 255) or 0 if no ID has been set
  */
-static HG_INLINE hg_uint8_t
-HG_Core_context_get_id(const hg_core_context_t *context);
+static HG_INLINE uint8_t
+HG_Core_context_get_id(const hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
 
 /**
  * Associate user data to context. When HG_Core_context_destroy() is called,
@@ -349,7 +417,19 @@ HG_Core_context_set_data(
  * \return Pointer to user data or NULL if not set or any error has occurred
  */
 static HG_INLINE void *
-HG_Core_context_get_data(const hg_core_context_t *context);
+HG_Core_context_get_data(
+    const hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
+
+/**
+ * Get current number of completion entries in context's completion queue.
+ *
+ * \param context [IN]          pointer to HG core context
+ *
+ * \return non-negative integer or zero if no entries
+ */
+HG_PUBLIC unsigned int
+HG_Core_context_get_completion_count(
+    const hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
 
 /**
  * Set callback to be called on HG core handle creation. Handles are created
@@ -370,17 +450,29 @@ HG_Core_context_set_handle_create_callback(hg_core_context_t *context,
 /**
  * Post requests associated to context in order to receive incoming RPCs.
  * Requests are automatically re-posted after completion until the context is
- * destroyed. Additionally a callback can be triggered on HG handle
- * creation. This allows upper layers to instantiate data that needs to be
- * attached to a handle. Number of requests that are posted can be controlled
- * through HG init info.
+ * destroyed or HG_Core_context_unpost() is called. Additionally a callback
+ * can be triggered on HG handle creation. This allows upper layers to
+ * instantiate data that needs to be attached to a handle. Number of requests
+ * that are posted can be controlled through HG init info.
  *
  * \param context [IN]          pointer to HG core context
  *
- * \return the associated class
+ * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
 HG_Core_context_post(hg_core_context_t *context);
+
+/**
+ * Cancel requests posted and wait for those requests to be successfully
+ * canceled. This prevents any further RPCs from being received until
+ * HG_Core_context_destroy() is called.
+ *
+ * \param context [IN]          pointer to HG core context
+ *
+ * \return HG_SUCCESS or corresponding HG error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_context_unpost(hg_core_context_t *context);
 
 /**
  * Dynamically register an RPC ID as well as the RPC callback executed
@@ -414,12 +506,12 @@ HG_Core_deregister(hg_core_class_t *hg_core_class, hg_id_t id);
  *
  * \param hg_core_class [IN]    pointer to HG core class
  * \param id [IN]               function ID
- * \param flag [OUT]            pointer to boolean
+ * \param flag_p [OUT]          pointer to boolean
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
-HG_Core_registered(hg_core_class_t *hg_core_class, hg_id_t id, hg_bool_t *flag);
+HG_Core_registered(hg_core_class_t *hg_core_class, hg_id_t id, uint8_t *flag_p);
 
 /**
  * Register and associate user data to registered function. When
@@ -447,7 +539,41 @@ HG_Core_register_data(hg_core_class_t *hg_core_class, hg_id_t id, void *data,
  * \return Pointer to data or NULL
  */
 HG_PUBLIC void *
-HG_Core_registered_data(hg_core_class_t *hg_core_class, hg_id_t id);
+HG_Core_registered_data(
+    hg_core_class_t *hg_core_class, hg_id_t id) HG_WARN_UNUSED_RESULT;
+
+/**
+ * Disable response for a given RPC ID. This allows an origin process to send an
+ * RPC to a target without waiting for a response. The RPC completes locally and
+ * the callback on the origin is therefore pushed to the completion queue once
+ * the RPC send is completed. By default, all RPCs expect a response to
+ * be sent back.
+ *
+ * \param hg_core_class [IN]    pointer to HG core class
+ * \param id [IN]               registered function ID
+ * \param disable [IN]          boolean (HG_TRUE to disable
+ *                                       HG_FALSE to re-enable)
+ *
+ * \return HG_SUCCESS or corresponding HG error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_registered_disable_response(
+    hg_core_class_t *hg_core_class, hg_id_t id, uint8_t disable);
+
+/**
+ * Check if response is disabled for a given RPC ID
+ * (i.e., HG_Registered_disable_response() has been called for this RPC ID).
+ *
+ * \param hg_core_class [IN]    pointer to HG core class
+ * \param id [IN]               registered function ID
+ * \param disabled_p [OUT]      boolean (HG_TRUE if disabled
+ *                                       HG_FALSE if enabled)
+ *
+ * \return HG_SUCCESS or corresponding HG error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_registered_disabled_response(
+    hg_core_class_t *hg_core_class, hg_id_t id, uint8_t *disabled_p);
 
 /**
  * Lookup an addr from a peer address/name. Addresses need to be
@@ -472,13 +598,13 @@ HG_Core_addr_lookup1(hg_core_context_t *context, hg_core_cb_t callback,
  *
  * \param hg_core_class [IN]    pointer to HG core class
  * \param name [IN]             lookup name
- * \param addr [OUT]            pointer to abstract address
+ * \param addr_p [OUT]          pointer to abstract address
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
 HG_Core_addr_lookup2(
-    hg_core_class_t *hg_core_class, const char *name, hg_core_addr_t *addr);
+    hg_core_class_t *hg_core_class, const char *name, hg_core_addr_t *addr_p);
 
 /**
  * Free the addr from the list of peers.
@@ -508,10 +634,10 @@ HG_Core_addr_set_remove(hg_core_addr_t addr);
  *
  * \param addr [IN]             abstract address
  *
- * \return abstract NA addr or NA_ADDR_NULL if not a valid HG address
+ * \return abstract NA addr or NULL if not a valid HG address
  */
-static HG_INLINE na_addr_t
-HG_Core_addr_get_na(hg_core_addr_t addr);
+static HG_INLINE na_addr_t *
+HG_Core_addr_get_na(hg_core_addr_t addr) HG_WARN_UNUSED_RESULT;
 
 #ifdef NA_HAS_SM
 /**
@@ -519,22 +645,22 @@ HG_Core_addr_get_na(hg_core_addr_t addr);
  *
  * \param addr [IN]             abstract address
  *
- * \return abstract NA addr or NA_ADDR_NULL if not a valid HG address
+ * \return abstract NA addr or NULL if not a valid HG address
  */
-static HG_INLINE na_addr_t
-HG_Core_addr_get_na_sm(hg_core_addr_t addr);
+static HG_INLINE na_addr_t *
+HG_Core_addr_get_na_sm(hg_core_addr_t addr) HG_WARN_UNUSED_RESULT;
 #endif
 
 /**
  * Access self address. Address must be freed with HG_Core_addr_free().
  *
  * \param hg_core_class [IN]    pointer to HG core class
- * \param addr [OUT]            pointer to abstract address
+ * \param addr_p [OUT]          pointer to abstract address
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
-HG_Core_addr_self(hg_core_class_t *hg_core_class, hg_core_addr_t *addr);
+HG_Core_addr_self(hg_core_class_t *hg_core_class, hg_core_addr_t *addr_p);
 
 /**
  * Duplicate an existing HG abstract address. The duplicated address can be
@@ -542,12 +668,12 @@ HG_Core_addr_self(hg_core_class_t *hg_core_class, hg_core_addr_t *addr);
  * address must be freed with HG_Core_addr_free().
  *
  * \param addr [IN]             abstract address
- * \param new_addr [OUT]        pointer to abstract address
+ * \param new_addr_p [OUT]      pointer to abstract address
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
-HG_Core_addr_dup(hg_core_addr_t addr, hg_core_addr_t *new_addr);
+HG_Core_addr_dup(hg_core_addr_t addr, hg_core_addr_t *new_addr_p);
 
 /**
  * Compare two addresses.
@@ -557,18 +683,19 @@ HG_Core_addr_dup(hg_core_addr_t addr, hg_core_addr_t *new_addr);
  *
  * \return HG_TRUE if addresses are determined to be equal, HG_FALSE otherwise
  */
-HG_PUBLIC hg_bool_t
-HG_Core_addr_cmp(hg_core_addr_t addr1, hg_core_addr_t addr2);
+HG_PUBLIC uint8_t
+HG_Core_addr_cmp(
+    hg_core_addr_t addr1, hg_core_addr_t addr2) HG_WARN_UNUSED_RESULT;
 
 /**
  * Test whether address is self or not.
  *
  * \param addr [IN]            pointer to abstract address
  *
- * \return HG_TRUE if address is self address, HG_FALSE otherwise
+ * \return true if address is self address, false otherwise
  */
-static HG_INLINE hg_bool_t
-HG_Core_addr_is_self(hg_core_addr_t addr);
+static HG_INLINE bool
+HG_Core_addr_is_self(hg_core_addr_t addr) HG_WARN_UNUSED_RESULT;
 
 /**
  * Convert an addr to a string (returned string includes the terminating
@@ -595,7 +722,8 @@ HG_Core_addr_to_string(char *buf, hg_size_t *buf_size, hg_core_addr_t addr);
  * \return Non-negative value
  */
 HG_PUBLIC hg_size_t
-HG_Core_addr_get_serialize_size(hg_core_addr_t addr, unsigned long flags);
+HG_Core_addr_get_serialize_size(
+    hg_core_addr_t addr, unsigned long flags) HG_WARN_UNUSED_RESULT;
 
 /**
  * Serialize address into a buffer.
@@ -616,14 +744,14 @@ HG_Core_addr_serialize(
  * HG_Core_addr_free().
  *
  * \param hg_core_class [IN]    pointer to HG core class
- * \param addr [OUT]            pointer to abstract address
+ * \param addr_p [OUT]          pointer to abstract address
  * \param buf [IN]              pointer to buffer used for deserialization
  * \param buf_size [IN]         buffer size
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
-HG_Core_addr_deserialize(hg_core_class_t *hg_core_class, hg_core_addr_t *addr,
+HG_Core_addr_deserialize(hg_core_class_t *hg_core_class, hg_core_addr_t *addr_p,
     const void *buf, hg_size_t buf_size);
 
 /**
@@ -635,13 +763,13 @@ HG_Core_addr_deserialize(hg_core_class_t *hg_core_class, hg_core_addr_t *addr,
  * \param context [IN]          pointer to HG core context
  * \param addr [IN]             target address
  * \param id [IN]               registered function ID
- * \param handle [OUT]          pointer to HG handle
+ * \param handle_p [OUT]        pointer to HG handle
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
 HG_Core_create(hg_core_context_t *context, hg_core_addr_t addr, hg_id_t id,
-    hg_core_handle_t *handle);
+    hg_core_handle_t *handle_p);
 
 /**
  * Destroy HG handle. Decrement reference count, resources associated to the
@@ -686,8 +814,8 @@ HG_Core_ref_incr(hg_core_handle_t handle);
  *
  * \return Non-negative value or negative if the handle is not valid
  */
-HG_PUBLIC hg_int32_t
-HG_Core_ref_get(hg_core_handle_t handle);
+HG_PUBLIC int32_t
+HG_Core_ref_get(hg_core_handle_t handle) HG_WARN_UNUSED_RESULT;
 
 /**
  * Allows upper layers to attach data to an existing HG handle.
@@ -713,7 +841,7 @@ HG_Core_set_data(
  * \return Pointer to user data or NULL if not set or any error has occurred
  */
 static HG_INLINE void *
-HG_Core_get_data(hg_core_handle_t handle);
+HG_Core_get_data(hg_core_handle_t handle) HG_WARN_UNUSED_RESULT;
 
 /**
  * Get info from handle.
@@ -725,7 +853,7 @@ HG_Core_get_data(hg_core_handle_t handle);
  * \return Pointer to info or NULL in case of failure
  */
 static HG_INLINE const struct hg_core_info *
-HG_Core_get_info(hg_core_handle_t handle);
+HG_Core_get_info(hg_core_handle_t handle) HG_WARN_UNUSED_RESULT;
 
 /**
  * Allows upper layers to retrieve cached RPC data from an existing HG handle.
@@ -736,7 +864,7 @@ HG_Core_get_info(hg_core_handle_t handle);
  * \return Pointer to user data or NULL if not set or any error has occurred
  */
 static HG_INLINE const void *
-HG_Core_get_rpc_data(hg_core_handle_t handle);
+HG_Core_get_rpc_data(hg_core_handle_t handle) HG_WARN_UNUSED_RESULT;
 
 /**
  * Set target context ID that will receive and process the RPC request
@@ -748,35 +876,68 @@ HG_Core_get_rpc_data(hg_core_handle_t handle);
  * \return HG_SUCCESS or corresponding HG error code
  */
 static HG_INLINE hg_return_t
-HG_Core_set_target_id(hg_core_handle_t handle, hg_uint8_t id);
+HG_Core_set_target_id(hg_core_handle_t handle, uint8_t id);
+
+/**
+ * Get input payload size from handle.
+ *
+ * \param handle [IN]           HG handle
+ *
+ * \return Non-negative value or zero if no payload
+ */
+static HG_INLINE size_t
+HG_Core_get_input_payload_size(hg_core_handle_t handle);
 
 /**
  * Get input buffer from handle that can be used for serializing/deserializing
  * parameters.
  *
  * \param handle [IN]           HG handle
- * \param in_buf [OUT]          pointer to input buffer
- * \param in_buf_size [OUT]     pointer to input buffer size
+ * \param in_buf_p [OUT]        pointer to input buffer
+ * \param in_buf_size_p [OUT]   pointer to input buffer size
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 static HG_INLINE hg_return_t
 HG_Core_get_input(
-    hg_core_handle_t handle, void **in_buf, hg_size_t *in_buf_size);
+    hg_core_handle_t handle, void **in_buf_p, hg_size_t *in_buf_size_p);
+
+/**
+ * Release input buffer from handle so that it can be re-used early.
+ *
+ * \remark If HG_Core_release_input() is not called, the input buffer will
+ * later be released when calling HG_Core_destroy().
+ *
+ * \param handle [IN]           HG handle
+ *
+ * \return HG_SUCCESS or corresponding HG error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_release_input(hg_core_handle_t handle);
+
+/**
+ * Get output payload size from handle.
+ *
+ * \param handle [IN]           HG handle
+ *
+ * \return Non-negative value or zero if no payload
+ */
+static HG_INLINE size_t
+HG_Core_get_output_payload_size(hg_core_handle_t handle);
 
 /**
  * Get output buffer from handle that can be used for serializing/deserializing
  * parameters.
  *
  * \param handle [IN]           HG handle
- * \param out_buf [OUT]         pointer to output buffer
- * \param out_buf_size [OUT]    pointer to output buffer size
+ * \param out_buf_p [OUT]       pointer to output buffer
+ * \param out_buf_size_p [OUT]  pointer to output buffer size
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 static HG_INLINE hg_return_t
 HG_Core_get_output(
-    hg_core_handle_t handle, void **out_buf, hg_size_t *out_buf_size);
+    hg_core_handle_t handle, void **out_buf_p, hg_size_t *out_buf_size_p);
 
 /**
  * Forward a call using an existing HG handle. Input and output buffers can be
@@ -796,7 +957,7 @@ HG_Core_get_output(
  */
 HG_PUBLIC hg_return_t
 HG_Core_forward(hg_core_handle_t handle, hg_core_cb_t callback, void *arg,
-    hg_uint8_t flags, hg_size_t payload_size);
+    uint8_t flags, hg_size_t payload_size);
 
 /**
  * Respond back to the origin. The output buffer, which can be used to encode
@@ -813,9 +974,20 @@ HG_Core_forward(hg_core_handle_t handle, hg_core_cb_t callback, void *arg,
  */
 HG_PUBLIC hg_return_t
 HG_Core_respond(hg_core_handle_t handle, hg_core_cb_t callback, void *arg,
-    hg_uint8_t flags, hg_size_t payload_size);
+    uint8_t flags, hg_size_t payload_size);
 
 /**
+ * Cancel an ongoing operation.
+ *
+ * \param handle [IN]           HG handle
+ *
+ * \return HG_SUCCESS or corresponding HG error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_cancel(hg_core_handle_t handle);
+
+/**
+ * (Deprecated in favor of HG_Core_event_progress())
  * Try to progress RPC execution for at most timeout until timeout is reached or
  * any completion has occurred.
  * Progress should not be considered as wait, in the sense that it cannot be
@@ -831,6 +1003,7 @@ HG_PUBLIC hg_return_t
 HG_Core_progress(hg_core_context_t *context, unsigned int timeout);
 
 /**
+ * (Deprecated in favor of HG_Core_event_trigger())
  * Execute at most max_count callbacks. If timeout is non-zero, wait up to
  * timeout before returning. Function can return when at least one or more
  * callbacks are triggered (at most max_count).
@@ -838,23 +1011,66 @@ HG_Core_progress(hg_core_context_t *context, unsigned int timeout);
  * \param context [IN]          pointer to HG core context
  * \param timeout [IN]          timeout (in milliseconds)
  * \param max_count [IN]        maximum number of callbacks triggered
- * \param actual_count [IN]     actual number of callbacks triggered
+ * \param actual_count_p [OUT]  actual number of callbacks triggered
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
 HG_Core_trigger(hg_core_context_t *context, unsigned int timeout,
-    unsigned int max_count, unsigned int *actual_count);
+    unsigned int max_count, unsigned int *actual_count_p);
 
 /**
- * Cancel an ongoing operation.
+ * Retrieve file descriptor from internal wait object when supported.
+ * The descriptor can be used by upper layers for manual polling through the
+ * usual OS select/poll/epoll calls.
  *
- * \param handle [IN]           HG handle
+ * \param context [IN]          pointer to HG core context
+ *
+ * \return Non-negative integer if supported and negative if not supported
+ */
+HG_PUBLIC int
+HG_Core_event_get_wait_fd(
+    const hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
+
+/**
+ * Used to signal when it is safe to block on the file descriptor of the
+ * context's wait object or if there is already work that can be progressed.
+ * Calling HG_Core_event_ready() is mandatory before any call to
+ * select/poll/epoll (or equivalent) or the callee may not be signaled during
+ * these calls.
+ *
+ * \param context [IN/OUT]      pointer to HG core context
+ *
+ * \return true if there is already work to be progressed or false otherwise
+ */
+HG_PUBLIC bool
+HG_Core_event_ready(hg_core_context_t *context) HG_WARN_UNUSED_RESULT;
+
+/**
+ * Progress communication by placing any completed RPC events into the
+ * context's completion queue. Completed operations's callbacks can be triggered
+ * by a call to HG_Core_event_trigger().
+ *
+ * \param context [IN/OUT]      pointer to HG core context
+ * \param count_p [OUT]         number of entries in context completion queue
  *
  * \return HG_SUCCESS or corresponding HG error code
  */
 HG_PUBLIC hg_return_t
-HG_Core_cancel(hg_core_handle_t handle);
+HG_Core_event_progress(hg_core_context_t *context, unsigned int *count_p);
+
+/**
+ * Execute at most max_count callbacks.
+ *
+ * \param context [IN]          pointer to HG core context
+ * \param max_count [IN]        maximum number of callbacks triggered
+ * \param actual_count_p [OUT]  actual number of callbacks triggered
+ *
+ * \return HG_SUCCESS or corresponding HG error code
+ */
+HG_PUBLIC hg_return_t
+HG_Core_event_trigger(hg_core_context_t *context, unsigned int max_count,
+    unsigned int *actual_count_p);
 
 /************************************/
 /* Local Type and Struct Definition */
@@ -879,17 +1095,17 @@ struct hg_core_context {
 #endif
     void *data;                         /* User data */
     void (*data_free_callback)(void *); /* User data free callback */
-    hg_uint8_t id;                      /* Context ID */
+    uint8_t id;                         /* Context ID */
 };
 
 /* HG core addr */
 struct hg_core_addr {
     struct hg_core_class *core_class; /* HG core class */
-    na_addr_t na_addr;                /* NA address */
+    na_addr_t *na_addr;               /* NA address */
 #ifdef NA_HAS_SM
-    na_addr_t na_sm_addr; /* NA SM address */
+    na_addr_t *na_sm_addr; /* NA SM address */
 #endif
-    hg_bool_t is_self; /* Self address */
+    uint8_t is_self; /* Self address */
 };
 
 /* HG core RPC registration info */
@@ -897,6 +1113,8 @@ struct hg_core_rpc_info {
     hg_core_rpc_cb_t rpc_cb;       /* RPC callback */
     void *data;                    /* User data */
     void (*free_callback)(void *); /* User data free callback */
+    hg_id_t id;                    /* RPC ID */
+    uint8_t no_response;           /* RPC response not expected */
 };
 
 /* HG core handle */
@@ -907,10 +1125,12 @@ struct hg_core_handle {
     void (*data_free_callback)(void *); /* User data free callback */
     void *in_buf;                       /* Input buffer */
     void *out_buf;                      /* Output buffer */
-    na_size_t in_buf_size;              /* Input buffer size */
-    na_size_t out_buf_size;             /* Output buffer size */
-    na_size_t na_in_header_offset;      /* Input NA header offset */
-    na_size_t na_out_header_offset;     /* Output NA header offset */
+    size_t in_buf_size;                 /* Input buffer size */
+    size_t out_buf_size;                /* Output buffer size */
+    size_t na_in_header_offset;         /* Input NA header offset */
+    size_t na_out_header_offset;        /* Output NA header offset */
+    size_t in_buf_used;                 /* Amount of input buffer used */
+    size_t out_buf_used;                /* Amount of output buffer used */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -928,7 +1148,7 @@ HG_Core_class_get_protocol(const hg_core_class_t *hg_core_class)
 }
 
 /*---------------------------------------------------------------------------*/
-static HG_INLINE hg_bool_t
+static HG_INLINE bool
 HG_Core_class_is_listening(const hg_core_class_t *hg_core_class)
 {
     return NA_Is_listening(hg_core_class->na_class);
@@ -1015,7 +1235,7 @@ HG_Core_context_get_na_sm(const hg_core_context_t *context)
 #endif
 
 /*---------------------------------------------------------------------------*/
-static HG_INLINE hg_uint8_t
+static HG_INLINE uint8_t
 HG_Core_context_get_id(const hg_core_context_t *context)
 {
     return context->id;
@@ -1040,7 +1260,7 @@ HG_Core_context_get_data(const hg_core_context_t *context)
 }
 
 /*---------------------------------------------------------------------------*/
-static HG_INLINE na_addr_t
+static HG_INLINE na_addr_t *
 HG_Core_addr_get_na(hg_core_addr_t addr)
 {
     return addr->na_addr;
@@ -1048,7 +1268,7 @@ HG_Core_addr_get_na(hg_core_addr_t addr)
 
 /*---------------------------------------------------------------------------*/
 #ifdef NA_HAS_SM
-static HG_INLINE na_addr_t
+static HG_INLINE na_addr_t *
 HG_Core_addr_get_na_sm(hg_core_addr_t addr)
 {
     return addr->na_sm_addr;
@@ -1056,10 +1276,10 @@ HG_Core_addr_get_na_sm(hg_core_addr_t addr)
 #endif
 
 /*---------------------------------------------------------------------------*/
-static HG_INLINE hg_bool_t
+static HG_INLINE bool
 HG_Core_addr_is_self(hg_core_addr_t addr)
 {
-    return addr->is_self;
+    return (bool) addr->is_self;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1096,7 +1316,7 @@ HG_Core_get_rpc_data(hg_core_handle_t handle)
 
 /*---------------------------------------------------------------------------*/
 static HG_INLINE hg_return_t
-HG_Core_set_target_id(hg_core_handle_t handle, hg_uint8_t id)
+HG_Core_set_target_id(hg_core_handle_t handle, uint8_t id)
 {
     handle->info.context_id = id;
 
@@ -1104,31 +1324,60 @@ HG_Core_set_target_id(hg_core_handle_t handle, hg_uint8_t id)
 }
 
 /*---------------------------------------------------------------------------*/
+static HG_INLINE size_t
+HG_Core_get_input_payload_size(hg_core_handle_t handle)
+{
+    size_t header_size =
+        hg_core_header_request_get_size() + handle->na_in_header_offset;
+
+    if (handle->in_buf_used > header_size)
+        return handle->in_buf_used - header_size;
+    else
+        return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 static HG_INLINE hg_return_t
 HG_Core_get_input(
-    hg_core_handle_t handle, void **in_buf, hg_size_t *in_buf_size)
+    hg_core_handle_t handle, void **in_buf_p, hg_size_t *in_buf_size_p)
 {
     hg_size_t header_offset =
         hg_core_header_request_get_size() + handle->na_in_header_offset;
 
+    if (handle->in_buf == NULL)
+        return HG_FAULT;
+
     /* Space must be left for request header */
-    *in_buf = (char *) handle->in_buf + header_offset;
-    *in_buf_size = handle->in_buf_size - header_offset;
+    *in_buf_p = (char *) handle->in_buf + header_offset;
+    *in_buf_size_p = handle->in_buf_size - header_offset;
 
     return HG_SUCCESS;
 }
 
 /*---------------------------------------------------------------------------*/
+static HG_INLINE size_t
+HG_Core_get_output_payload_size(hg_core_handle_t handle)
+{
+    size_t header_size =
+        hg_core_header_response_get_size() + handle->na_out_header_offset;
+
+    if (handle->out_buf_used > header_size)
+        return handle->out_buf_used - header_size;
+    else
+        return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 static HG_INLINE hg_return_t
 HG_Core_get_output(
-    hg_core_handle_t handle, void **out_buf, hg_size_t *out_buf_size)
+    hg_core_handle_t handle, void **out_buf_p, hg_size_t *out_buf_size_p)
 {
     hg_size_t header_offset =
         hg_core_header_response_get_size() + handle->na_out_header_offset;
 
     /* Space must be left for response header */
-    *out_buf = (char *) handle->out_buf + header_offset;
-    *out_buf_size = handle->out_buf_size - header_offset;
+    *out_buf_p = (char *) handle->out_buf + header_offset;
+    *out_buf_size_p = handle->out_buf_size - header_offset;
 
     return HG_SUCCESS;
 }

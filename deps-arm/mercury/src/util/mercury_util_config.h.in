@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -14,13 +15,20 @@
 /*************************************/
 
 /* Type definitions */
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 
 /*****************/
 /* Public Macros */
 /*****************/
+
+/* Reflects any major or incompatible public API changes */
+#define HG_UTIL_VERSION_MAJOR @MERCURY_UTIL_VERSION_MAJOR@
+/* Reflects any minor backwards compatible API or functionality addition */
+#define HG_UTIL_VERSION_MINOR @MERCURY_UTIL_VERSION_MINOR@
+/* Reflects any backwards compatible bug fixes */
+#define HG_UTIL_VERSION_PATCH @MERCURY_UTIL_VERSION_PATCH@
 
 /* Return codes */
 #define HG_UTIL_SUCCESS 0
@@ -50,9 +58,11 @@
 #        define HG_UTIL_PUBLIC HG_ATTR_ABI_IMPORT
 #    endif
 #    define HG_UTIL_PRIVATE HG_ATTR_ABI_HIDDEN
+#    define HG_UTIL_PLUGIN  HG_ATTR_ABI_EXPORT /* plugins always export */
 #else
 #    define HG_UTIL_PUBLIC
 #    define HG_UTIL_PRIVATE
+#    define HG_UTIL_PLUGIN
 #endif
 
 /* Define if has __attribute__((constructor(priority))) */
@@ -72,9 +82,6 @@
 
 /* Define if has colored output */
 #cmakedefine HG_UTIL_HAS_LOG_COLOR
-
-/* Define if has <opa_primitives.h> */
-#cmakedefine HG_UTIL_HAS_OPA_PRIMITIVES_H
 
 /* Define if has 'pthread_condattr_setclock()' */
 #cmakedefine HG_UTIL_HAS_PTHREAD_CONDATTR_SETCLOCK
@@ -99,6 +106,12 @@
 
 /* Define if has <sys/eventfd.h> */
 #cmakedefine HG_UTIL_HAS_SYSEVENTFD_H
+
+/* Define if has <sys/param.h> */
+#cmakedefine HG_UTIL_HAS_SYSPARAM_H
+
+/* Define if has <sys/queue.h> */
+#cmakedefine HG_UTIL_HAS_SYSQUEUE_H
 
 /* Define if has <sys/time.h> */
 #cmakedefine HG_UTIL_HAS_SYSTIME_H

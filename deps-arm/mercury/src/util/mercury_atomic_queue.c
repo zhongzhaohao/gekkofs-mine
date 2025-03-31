@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -35,6 +36,7 @@
  */
 
 #include "mercury_atomic_queue.h"
+#include "mercury_param.h"
 #include "mercury_util_error.h"
 
 #include <stdlib.h>
@@ -42,9 +44,6 @@
 /****************/
 /* Local Macros */
 /****************/
-
-/* From <sys/param.h> */
-#define powerof2(x) ((((x) -1) & (x)) == 0)
 
 /*---------------------------------------------------------------------------*/
 struct hg_atomic_queue *

@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -53,8 +54,8 @@ hg_dlog_alloc(char *name, unsigned int lesize, int leloop)
     snprintf(
         d->dlog_magic, sizeof(d->dlog_magic), "%s%s", HG_DLOG_STDMAGIC, name);
     hg_thread_mutex_init(&d->dlock);
-    HG_LIST_INIT(&d->cnts32);
-    HG_LIST_INIT(&d->cnts64);
+    SLIST_INIT(&d->cnts32);
+    SLIST_INIT(&d->cnts64);
     d->le = le;
     d->lesize = lesize;
     d->leloop = leloop;
@@ -67,22 +68,22 @@ hg_dlog_alloc(char *name, unsigned int lesize, int leloop)
 void
 hg_dlog_free(struct hg_dlog *d)
 {
-    struct hg_dlog_dcount32 *cp32 = HG_LIST_FIRST(&d->cnts32);
-    struct hg_dlog_dcount64 *cp64 = HG_LIST_FIRST(&d->cnts64);
+    struct hg_dlog_dcount32 *cp32 = SLIST_FIRST(&d->cnts32);
+    struct hg_dlog_dcount64 *cp64 = SLIST_FIRST(&d->cnts64);
 
     while (cp32) {
         struct hg_dlog_dcount32 *cp = cp32;
-        cp32 = HG_LIST_NEXT(cp, l);
+        cp32 = SLIST_NEXT(cp, l);
         free(cp);
     }
-    HG_LIST_INIT(&d->cnts32);
+    SLIST_INIT(&d->cnts32);
 
     while (cp64) {
         struct hg_dlog_dcount64 *cp = cp64;
-        cp64 = HG_LIST_NEXT(cp, l);
+        cp64 = SLIST_NEXT(cp, l);
         free(cp);
     }
-    HG_LIST_INIT(&d->cnts64);
+    SLIST_INIT(&d->cnts64);
 
     if (d->mallocd) {
         free(d->le);
@@ -107,7 +108,7 @@ hg_dlog_mkcount32(struct hg_dlog *d, hg_atomic_int32_t **cptr, const char *name,
         dcnt->name = name;
         dcnt->descr = descr;
         hg_atomic_init32(&dcnt->c, 0);
-        HG_LIST_INSERT_HEAD(&d->cnts32, dcnt, l);
+        SLIST_INSERT_HEAD(&d->cnts32, dcnt, l);
         *cptr = &dcnt->c; /* set it in caller's variable */
     }
     hg_thread_mutex_unlock(&d->dlock);
@@ -130,10 +131,41 @@ hg_dlog_mkcount64(struct hg_dlog *d, hg_atomic_int64_t **cptr, const char *name,
         dcnt->name = name;
         dcnt->descr = descr;
         hg_atomic_init64(&dcnt->c, 0);
-        HG_LIST_INSERT_HEAD(&d->cnts64, dcnt, l);
+        SLIST_INSERT_HEAD(&d->cnts64, dcnt, l);
         *cptr = &dcnt->c; /* set it in caller's variable */
     }
     hg_thread_mutex_unlock(&d->dlock);
+}
+
+/*---------------------------------------------------------------------------*/
+unsigned int
+hg_dlog_addlog(struct hg_dlog *d, const char *file, unsigned int line,
+    const char *func, const char *msg, const void *data)
+{
+    unsigned int rv = 0;
+    unsigned int idx;
+
+    hg_thread_mutex_lock(&d->dlock);
+    if (d->lestop)
+        goto done;
+    if (d->leloop == 0 && d->leadds >= d->lesize)
+        goto done;
+    idx = d->lefree;
+    d->lefree = (d->lefree + 1) % d->lesize;
+    if (d->leadds < d->lesize)
+        d->leadds++;
+    d->le[idx] = (struct hg_dlog_entry){.file = file,
+        .line = line,
+        .func = func,
+        .msg = msg,
+        .data = data,
+        .time = hg_time_from_ms(0)};
+    hg_time_get_current(&d->le[idx].time);
+    rv = 1;
+
+done:
+    hg_thread_mutex_unlock(&d->dlock);
+    return rv;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -177,13 +209,13 @@ hg_dlog_dump(struct hg_dlog *d, int (*log_func)(FILE *, const char *, ...),
             "### (%s) debug log summary\n"
             "### ----------------------\n",
             (d->dlog_magic + strlen(HG_DLOG_STDMAGIC)));
-        if (!HG_LIST_IS_EMPTY(&d->cnts32) && !HG_LIST_IS_EMPTY(&d->cnts64)) {
+        if (!SLIST_EMPTY(&d->cnts32) && !SLIST_EMPTY(&d->cnts64)) {
             log_func(stream, "# Counters\n");
-            HG_LIST_FOREACH (dc32, &d->cnts32, l) {
+            SLIST_FOREACH (dc32, &d->cnts32, l) {
                 log_func(stream, "# %s: %" PRId32 " [%s]\n", dc32->name,
                     hg_atomic_get32(&dc32->c), dc32->descr);
             }
-            HG_LIST_FOREACH (dc64, &d->cnts64, l) {
+            SLIST_FOREACH (dc64, &d->cnts64, l) {
                 log_func(stream, "# %s: %" PRId64 " [%s]\n", dc64->name,
                     hg_atomic_get64(&dc64->c), dc64->descr);
             }
@@ -200,6 +232,43 @@ hg_dlog_dump(struct hg_dlog *d, int (*log_func)(FILE *, const char *, ...),
                 hg_time_to_double(d->le[idx].time), d->le[idx].file,
                 d->le[idx].line, d->le[idx].func);
             idx = (idx + 1) % d->lesize;
+        }
+    }
+
+    hg_thread_mutex_unlock(&d->dlock);
+}
+
+/*---------------------------------------------------------------------------*/
+void
+hg_dlog_dump_counters(struct hg_dlog *d,
+    int (*log_func)(FILE *, const char *, ...), FILE *stream, int trylock)
+{
+    struct hg_dlog_dcount32 *dc32;
+    struct hg_dlog_dcount64 *dc64;
+
+    if (trylock) {
+        int try_ret = hg_thread_mutex_try_lock(&d->dlock);
+        if (try_ret != HG_UTIL_SUCCESS) /* warn them, but keep going */ {
+            fprintf(stderr, "hg_dlog_dump: WARN - lock failed\n");
+            return;
+        }
+    } else
+        hg_thread_mutex_lock(&d->dlock);
+
+    if (!SLIST_EMPTY(&d->cnts32) || !SLIST_EMPTY(&d->cnts64)) {
+        log_func(stream,
+            "### --------------------------\n"
+            "### (%s) counter log summary\n"
+            "### --------------------------\n",
+            (d->dlog_magic + strlen(HG_DLOG_STDMAGIC)));
+
+        SLIST_FOREACH (dc32, &d->cnts32, l) {
+            log_func(stream, "# %s: %" PRId32 " [%s]\n", dc32->name,
+                hg_atomic_get32(&dc32->c), dc32->descr);
+        }
+        SLIST_FOREACH (dc64, &d->cnts64, l) {
+            log_func(stream, "# %s: %" PRId64 " [%s]\n", dc64->name,
+                hg_atomic_get64(&dc64->c), dc64->descr);
         }
     }
 
@@ -245,11 +314,11 @@ hg_dlog_dump_file(struct hg_dlog *d, const char *base, int addpid, int trylock)
         hg_thread_mutex_lock(&d->dlock);
 
     fprintf(fp, "# START COUNTERS\n");
-    HG_LIST_FOREACH (dc32, &d->cnts32, l) {
+    SLIST_FOREACH (dc32, &d->cnts32, l) {
         fprintf(fp, "%s %d %" PRId32 " # %s\n", dc32->name, pid,
             hg_atomic_get32(&dc32->c), dc32->descr);
     }
-    HG_LIST_FOREACH (dc64, &d->cnts64, l) {
+    SLIST_FOREACH (dc64, &d->cnts64, l) {
         fprintf(fp, "%s %d %" PRId64 " # %s\n", dc64->name, pid,
             hg_atomic_get64(&dc64->c), dc64->descr);
     }

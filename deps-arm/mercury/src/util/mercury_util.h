@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -24,6 +25,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * Get HG util version number.
+ *
+ * \param major [OUT]           pointer to unsigned integer
+ * \param minor [OUT]           pointer to unsigned integer
+ * \param patch [OUT]           pointer to unsigned integer
+ */
+HG_UTIL_PUBLIC void
+HG_Util_version_get(
+    unsigned int *major, unsigned int *minor, unsigned int *patch);
 
 /**
  * Set the log level for HG util. That setting is valid for all HG classes.

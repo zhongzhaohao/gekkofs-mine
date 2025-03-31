@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -120,9 +121,9 @@ hg_time_to_ms(hg_time_t tv);
  * \param in1 [IN]              time structure
  * \param in2 [IN]              time structure
  *
- * \return 1 if in1 < in2, 0 otherwise
+ * \return true if in1 < in2, false otherwise
  */
-static HG_UTIL_INLINE int
+static HG_UTIL_INLINE bool
 hg_time_less(hg_time_t in1, hg_time_t in2);
 
 /**
@@ -353,9 +354,10 @@ static HG_UTIL_INLINE unsigned int
 hg_time_to_ms(hg_time_t tv)
 {
 #if defined(HG_UTIL_HAS_TIME_H) && defined(HG_UTIL_HAS_CLOCK_GETTIME)
-    return (unsigned int) (tv.tv_sec * 1000 + tv.tv_nsec / 1000000);
+    return (
+        unsigned int) (tv.tv_sec * 1000 + ((tv.tv_nsec + 999999) / 1000000));
 #else
-    return (unsigned int) (tv.tv_sec * 1000 + tv.tv_usec / 1000);
+    return (unsigned int) (tv.tv_sec * 1000 + ((tv.tv_usec + 999) / 1000));
 #endif
 }
 
@@ -373,7 +375,7 @@ hg_time_from_ms(unsigned int ms)
 }
 
 /*---------------------------------------------------------------------------*/
-static HG_UTIL_INLINE int
+static HG_UTIL_INLINE bool
 hg_time_less(hg_time_t in1, hg_time_t in2)
 {
     return ((in1.tv_sec < in2.tv_sec) || ((in1.tv_sec == in2.tv_sec) &&

@@ -38,11 +38,6 @@ static void my_rpc_shutdown_ult(hg_handle_t handle)
 
     margo_destroy(handle);
 
-    /* NOTE: we assume that the server daemon is using
-     * margo_wait_for_finalize() to suspend until this RPC executes, so there
-     * is no need to send any extra signal to notify it.
-     */
-    margo_diag_dump(mid, "-", 0);
     margo_finalize(mid);
 
     return;
@@ -78,15 +73,16 @@ int main(int argc, char** argv)
     mid = margo_init(argv[1], MARGO_SERVER_MODE, 0, -1);
     if (mid == MARGO_INSTANCE_NULL) {
         fprintf(stderr, "Error: margo_init()\n");
+        free(svc_list);
         return (-1);
     }
-    margo_diag_start(mid);
 
     /* figure out what address this server is listening on */
     hret = margo_addr_self(mid, &addr_self);
     if (hret != HG_SUCCESS) {
         fprintf(stderr, "Error: margo_addr_self()\n");
         margo_finalize(mid);
+        free(svc_list);
         return (-1);
     }
     hret = margo_addr_to_string(mid, addr_self_string, &addr_self_string_sz,
@@ -95,6 +91,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "Error: margo_addr_to_string()\n");
         margo_addr_free(mid, addr_self);
         margo_finalize(mid);
+        free(svc_list);
         return (-1);
     }
     margo_addr_free(mid, addr_self);
@@ -121,6 +118,7 @@ int main(int argc, char** argv)
 
         svc = strtok(NULL, ",");
     }
+    free(svc_list);
 
     /* shut things down */
     /****************************************/

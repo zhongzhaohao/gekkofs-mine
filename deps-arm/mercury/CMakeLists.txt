@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12.2 FATAL_ERROR)
+cmake_minimum_required(VERSION 2.8.12.2...3.15 FATAL_ERROR)
 
 # Setup cmake policies.
 foreach(policy
@@ -64,7 +64,7 @@ set(MERCURY_CMAKE_MODULE_PATH "${MERCURY_SOURCE_DIR}/CMake")
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${MERCURY_CMAKE_MODULE_PATH})
 
 #------------------------------------------------------------------------------
-# Version information 
+# Version information
 #------------------------------------------------------------------------------
 include(${MERCURY_CMAKE_MODULE_PATH}/Git/Git.cmake)
 include(MercuryDetermineVersion)
@@ -98,8 +98,6 @@ if(APPLE AND NOT MERCURY_EXTERNALLY_CONFIGURED)
     set(CMAKE_INSTALL_PREFIX ${CACHED_CMAKE_INSTALL_PREFIX} CACHE PATH "Install prefix")
   endif()
   unset(MACOSX_APP_INSTALL_PREFIX CACHE)
-
-  set(CMAKE_INSTALL_NAME_DIR "@rpath")
   mark_as_advanced(
     CMAKE_OSX_ARCHITECTURES
     CMAKE_OSX_DEPLOYMENT_TARGET
@@ -124,7 +122,7 @@ endif()
 #------------------------------------------------------------------------------
 # Disallow in-source build
 #------------------------------------------------------------------------------
-if("${MERCURY_SOURCE_DIR}" STREQUAL "${MERCURY_BINARY_DIR}")
+if(NOT CMAKE_IN_SOURCE_BUILD AND "${MERCURY_SOURCE_DIR}" STREQUAL "${MERCURY_BINARY_DIR}")
   message(FATAL_ERROR
     "Mercury requires an out of source Build. "
     "Please create a separate binary directory and run CMake there.")
@@ -182,8 +180,26 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
-function(mercury_set_lib_options libtarget libname libtype)
-  if(${libtype} MATCHES "SHARED")
+if(${CMAKE_VERSION} VERSION_GREATER 3.14)
+  include(CheckPIESupported)
+  check_pie_supported(OUTPUT_VARIABLE output LANGUAGES C)
+  if(BUILD_SHARED_LIBS AND NOT CMAKE_C_LINK_PIE_SUPPORTED)
+    message(WARNING "PIE is not supported at link time: ${output}.\n"
+                    "PIE link options will not be passed to linker.")
+  endif()
+endif()
+
+function(mercury_set_exe_options exetarget var_prefix)
+  set_target_properties(${exetarget} PROPERTIES
+      POSITION_INDEPENDENT_CODE  ${BUILD_SHARED_LIBS}
+      INSTALL_RPATH              ${${var_prefix}_INSTALL_LIB_DIR}
+      INSTALL_NAME_DIR           ${${var_prefix}_INSTALL_LIB_DIR}
+  )
+endfunction()
+
+#-------------------------------------------------------------------------------
+function(mercury_set_lib_options libtarget libname libtype var_prefix)
+  if(${libtype} MATCHES "SHARED" OR ${libtype} MATCHES "MODULE")
     if(WIN32 AND NOT MINGW)
       set(LIB_RELEASE_NAME "${libname}")
       set(LIB_DEBUG_NAME "${libname}_D")
@@ -191,8 +207,6 @@ function(mercury_set_lib_options libtarget libname libtype)
       set(LIB_RELEASE_NAME "${libname}")
       set(LIB_DEBUG_NAME "${libname}_debug")
     endif()
-    set(LIB_VERSION ${MERCURY_VERSION}.${MERCURY_VERSION_PATCH})
-    set(API_VERSION ${MERCURY_VERSION_MAJOR})
   else()
     if(WIN32 AND NOT MINGW)
       set(LIB_RELEASE_NAME "lib${libname}")
@@ -218,9 +232,20 @@ function(mercury_set_lib_options libtarget libname libtype)
       OUTPUT_NAME_ASAN           ${LIB_DEBUG_NAME}
       OUTPUT_NAME_TSAN           ${LIB_DEBUG_NAME}
       OUTPUT_NAME_UBSAN          ${LIB_DEBUG_NAME}
-      VERSION                    ${LIB_VERSION}
-      SOVERSION                  ${API_VERSION}
   )
+  if(${libtype} MATCHES "SHARED")
+    set_target_properties(${libtarget}
+        PROPERTIES
+        INSTALL_RPATH              ${${var_prefix}_INSTALL_LIB_DIR}
+        INSTALL_NAME_DIR           ${${var_prefix}_INSTALL_LIB_DIR}
+        VERSION                    ${${var_prefix}_VERSION}.${${var_prefix}_VERSION_PATCH}
+        SOVERSION                  ${${var_prefix}_VERSION_MAJOR}
+    )
+  endif()
+
+  if(MSVC)
+    target_compile_definitions(${libtarget} PRIVATE -D_CRT_SECURE_NO_WARNINGS)
+  endif()
 
   #----- Use MSVC Naming conventions for Shared Libraries
   if(MINGW AND ${libtype} MATCHES "SHARED")
@@ -233,12 +258,76 @@ function(mercury_set_lib_options libtarget libname libtype)
   endif()
 endfunction()
 
+#-----------------------------------------------------------------------------
+function(mercury_get_pc_lib_name output_var lib_target)
+  if(CMAKE_BUILD_TYPE)
+    string(TOLOWER ${CMAKE_BUILD_TYPE} lower_cmake_build_type)
+  endif()
+  if(lower_cmake_build_type MATCHES "debug")
+    get_target_property(${output_var} ${lib_target} OUTPUT_NAME_DEBUG)
+  else()
+    get_target_property(${output_var} ${lib_target} OUTPUT_NAME_RELEASE)
+  endif()
+  set(${output_var} "${${output_var}}" PARENT_SCOPE)
+endfunction()
+
+#-----------------------------------------------------------------------------
+function(mercury_get_pc_inc_deps output_var inc_deps)
+  foreach(inc_dep ${inc_deps})
+    set(${output_var} "${${output_var}} -I${inc_dep}")
+  endforeach()
+  set(${output_var} "${${output_var}}" PARENT_SCOPE)
+endfunction()
+
+#-----------------------------------------------------------------------------
+function(mercury_get_pc_lib_deps output_var lib_deps)
+  # Need to generate -llib if not already passed
+  foreach(lib_dep ${lib_deps})
+    # get library name
+    get_filename_component(lib_name ${lib_dep} NAME_WE)
+    if(lib_name MATCHES "^-l" OR lib_name MATCHES "-pthread")
+      # lib_name found is -lxxx
+      set(deps_list ${deps_list} ${lib_name})
+    else()
+      # lib_name is /path/to/lib so get library path and name
+      get_filename_component(lib_path ${lib_dep} PATH)
+      if(lib_path)
+        set(deps_list ${deps_list} -L${lib_path})
+      endif()
+      string(REGEX REPLACE "^lib" "" lib_name ${lib_name})
+      set(deps_list ${deps_list} "-l${lib_name}")
+    endif()
+  endforeach()
+  if(deps_list)
+    list(REMOVE_DUPLICATES deps_list)
+    string(REPLACE ";" " " ${output_var} "${deps_list}")
+  endif()
+  set(${output_var} "${${output_var}}" PARENT_SCOPE)
+endfunction()
+
+#-----------------------------------------------------------------------------
 # Avoid explicitly including system include paths
 set(MERCURY_SYSTEM_INCLUDE_PATH ${CMAKE_SYSTEM_INCLUDE_PATH}
   ${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES})
-if(NOT WIN32)
-  set(MERCURY_SYSTEM_INCLUDE_PATH /usr/include ${MERCURY_SYSTEM_INCLUDE_PATH})
-endif()
+function(mercury_clean_include_path path_list)
+  if(${path_list})
+    foreach(item ${MERCURY_SYSTEM_INCLUDE_PATH})
+      list(REMOVE_ITEM ${path_list} ${item})
+    endforeach()
+  endif()
+  set(${path_list} "${${path_list}}" PARENT_SCOPE)
+endfunction()
+
+set(MERCURY_SYSTEM_LIBRARY_PATH ${CMAKE_SYSTEM_LIBRARY_PATH}
+  ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
+function(mercury_clean_library_path path_list)
+  if(${path_list})
+    foreach(item ${MERCURY_SYSTEM_LIBRARY_PATH})
+      list(REMOVE_ITEM ${path_list} ${item})
+    endforeach()
+  endif()
+  set(${path_list} "${${path_list}}" PARENT_SCOPE)
+endfunction()
 
 #-----------------------------------------------------------------------------
 # Coverage
@@ -265,6 +354,11 @@ endif()
 # Source
 #-----------------------------------------------------------------------------
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+#-----------------------------------------------------------------------------
+# Util
+#-----------------------------------------------------------------------------
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/util)
 
 #-----------------------------------------------------------------------------
 # Build doxygen documentation.
@@ -336,23 +430,6 @@ install(
   DESTINATION
     ${MERCURY_INSTALL_DATA_DIR}/cmake/${MERCURY_PACKAGE}
 )
-
-#-----------------------------------------------------------------------------
-# For automake compatibility, also provide a pkgconfig file
-#-----------------------------------------------------------------------------
-if(NOT WIN32)
-  configure_file(
-    ${MERCURY_SOURCE_DIR}/CMake/${MERCURY_PACKAGE}.pc.in
-    ${MERCURY_BINARY_DIR}/CMakeFiles/${MERCURY_PACKAGE}.pc @ONLY
-  )
-
-  install(
-    FILES
-      ${MERCURY_BINARY_DIR}/CMakeFiles/${MERCURY_PACKAGE}.pc
-    DESTINATION
-      ${MERCURY_INSTALL_LIB_DIR}/pkgconfig
-  )
-endif()
 
 #-----------------------------------------------------------------------------
 # CPack

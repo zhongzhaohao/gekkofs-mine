@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -44,7 +45,12 @@ using std::memory_order_acq_rel;
 using std::memory_order_acquire;
 using std::memory_order_release;
 #    endif
-#    define HG_ATOMIC_VAR_INIT(x) ATOMIC_VAR_INIT(x)
+#    if (__STDC_VERSION__ >= 201710L ||                                        \
+         (defined(__cplusplus) && __cplusplus >= 202002L))
+#        define HG_ATOMIC_VAR_INIT(x) (x)
+#    else
+#        define HG_ATOMIC_VAR_INIT(x) ATOMIC_VAR_INIT(x)
+#    endif
 #elif defined(__APPLE__)
 #    include <libkern/OSAtomic.h>
 typedef struct {
@@ -96,7 +102,7 @@ hg_atomic_set32(hg_atomic_int32_t *ptr, int32_t value);
  * \return Value of the atomic integer
  */
 static HG_UTIL_INLINE int32_t
-hg_atomic_get32(hg_atomic_int32_t *ptr);
+hg_atomic_get32(const hg_atomic_int32_t *ptr);
 
 /**
  * Increment atomic value (32-bit integer).
@@ -191,7 +197,7 @@ hg_atomic_set64(hg_atomic_int64_t *ptr, int64_t value);
  * \return Value of the atomic integer
  */
 static HG_UTIL_INLINE int64_t
-hg_atomic_get64(hg_atomic_int64_t *ptr);
+hg_atomic_get64(const hg_atomic_int64_t *ptr);
 
 /**
  * Increment atomic value (64-bit integer).
@@ -295,7 +301,7 @@ hg_atomic_set32(hg_atomic_int32_t *ptr, int32_t value)
 
 /*---------------------------------------------------------------------------*/
 static HG_UTIL_INLINE int32_t
-hg_atomic_get32(hg_atomic_int32_t *ptr)
+hg_atomic_get32(const hg_atomic_int32_t *ptr)
 {
     int32_t ret;
 
@@ -460,7 +466,7 @@ hg_atomic_set64(hg_atomic_int64_t *ptr, int64_t value)
 
 /*---------------------------------------------------------------------------*/
 static HG_UTIL_INLINE int64_t
-hg_atomic_get64(hg_atomic_int64_t *ptr)
+hg_atomic_get64(const hg_atomic_int64_t *ptr)
 {
     int64_t ret;
 
@@ -591,7 +597,7 @@ hg_atomic_cas64(
 
 /*---------------------------------------------------------------------------*/
 static HG_UTIL_INLINE void
-hg_atomic_fence()
+hg_atomic_fence(void)
 {
 #if defined(_WIN32)
     MemoryBarrier();

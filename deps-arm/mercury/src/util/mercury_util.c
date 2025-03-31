@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -25,7 +26,20 @@
 /*******************/
 
 /* Default error log mask */
-HG_LOG_SUBSYS_DECL_REGISTER(HG_UTIL_SUBSYS_NAME, hg);
+HG_LOG_DECL_REGISTER(HG_UTIL_SUBSYS_NAME);
+
+/*---------------------------------------------------------------------------*/
+void
+HG_Util_version_get(
+    unsigned int *major, unsigned int *minor, unsigned int *patch)
+{
+    if (major)
+        *major = HG_UTIL_VERSION_MAJOR;
+    if (minor)
+        *minor = HG_UTIL_VERSION_MINOR;
+    if (patch)
+        *patch = HG_UTIL_VERSION_PATCH;
+}
 
 /*---------------------------------------------------------------------------*/
 void

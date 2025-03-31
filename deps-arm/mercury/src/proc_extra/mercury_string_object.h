@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -15,8 +16,8 @@
 
 typedef struct hg_string_object {
     char *data;
-    hg_bool_t is_const;
-    hg_bool_t is_owned;
+    bool is_const;
+    bool is_owned;
 } hg_string_object_t;
 
 /*****************/
@@ -52,7 +53,7 @@ hg_string_object_init(hg_string_object_t *string);
  */
 HG_PUBLIC hg_return_t
 hg_string_object_init_char(
-    hg_string_object_t *string, char *s, hg_bool_t is_owned);
+    hg_string_object_t *string, char *s, uint8_t is_owned);
 
 /**
  * Initialize a string object from the const string pointed to by s.
@@ -65,7 +66,7 @@ hg_string_object_init_char(
  */
 HG_PUBLIC hg_return_t
 hg_string_object_init_const_char(
-    hg_string_object_t *string, const char *s, hg_bool_t is_owned);
+    hg_string_object_t *string, const char *s, uint8_t is_owned);
 
 /**
  * Free a string object.

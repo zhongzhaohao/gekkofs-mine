@@ -36,7 +36,7 @@ static void delegator_read_ult(hg_handle_t handle)
     assert(hret == HG_SUCCESS);
     hgi = margo_get_info(handle);
     assert(hgi);
-    mid = margo_hg_info_get_instance(hgi);
+    mid = margo_hg_handle_get_instance(handle);
     assert(mid != MARGO_INSTANCE_NULL);
 
 #if 0
@@ -106,6 +106,9 @@ void delegator_deregister(margo_instance_id mid,
                           ABT_pool          pool,
                           uint32_t          provider_id)
 {
+    (void)mid;
+    (void)pool;
+    (void)provider_id;
     /* TODO: undo what was done in delegator_register() */
     return;
 }

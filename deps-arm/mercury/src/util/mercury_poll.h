@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -74,7 +75,7 @@ hg_poll_destroy(hg_poll_set_t *poll_set);
  * \return Non-negative on success or negative on failure
  */
 HG_UTIL_PUBLIC int
-hg_poll_get_fd(hg_poll_set_t *poll_set);
+hg_poll_get_fd(const hg_poll_set_t *poll_set);
 
 /**
  * Add file descriptor to poll set.

@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -8,6 +9,7 @@
 
 #include <mercury.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <snappy-c.h>
@@ -56,7 +58,7 @@ snappy_compress_rpc_cb(const struct hg_cb_info *callback_info)
     HG_Get_output(handle, &snappy_compress_output);
 
     /* Get Snappy output parameters */
-    ret = snappy_compress_output.ret;
+    ret = (snappy_status) snappy_compress_output.ret;
     compressed_length = snappy_compress_output.compressed_length;
     compressed = snappy_compress_rpc_args->compressed;
     input = snappy_compress_rpc_args->input;

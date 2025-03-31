@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2013-2021 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2013-2022 UChicago Argonne, LLC and The HDF Group.
+ * Copyright (c) 2022-2023 Intel Corporation.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -10,6 +11,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 /* This is an example client program that issues 4 concurrent RPCs, each of
@@ -85,7 +87,7 @@ run_my_rpc(const char *svr_addr_string, int value)
     hg_addr_t svr_addr;
     my_rpc_in_t in;
     const struct hg_info *hgi;
-    int ret;
+    hg_return_t ret;
     struct my_rpc_state *my_rpc_state_p;
 
     /* address lookup. */
@@ -129,7 +131,7 @@ static hg_return_t
 my_rpc_cb(const struct hg_cb_info *info)
 {
     my_rpc_out_t out;
-    int ret;
+    hg_return_t ret;
     struct my_rpc_state *my_rpc_state_p = info->arg;
 
     assert(info->ret == HG_SUCCESS);

@@ -3,32 +3,36 @@ ACLOCAL_AMFLAGS = -I m4
 
 bin_PROGRAMS =
 bin_SCRIPTS =
-dist_bin_SCRIPTS = scripts/margo-gen-profile
-dist_noinst_SCRIPTS = scripts/margo-gen-profile
 
 noinst_PROGRAMS =
 noinst_HEADERS =
 TESTS =
-XFAIL_TESTS = 
+XFAIL_TESTS =
 check_PROGRAMS =
 EXTRA_PROGRAMS =
 CLEANFILES = $(bin_SCRIPTS)
+DISTCLEANFILES =
 MAINTAINERCLEANFILES =
 EXTRA_DIST =
 BUILT_SOURCES =
 include_HEADERS = \
  include/margo.h \
+ include/margo-config.h \
  include/margo-logging.h \
- include/margo-diag.h \
  include/margo-bulk-pool.h \
- include/margo-util.h
+ include/margo-util.h \
+ include/margo-bulk-util.h \
+ include/margo-timer.h \
+ include/margo-monitoring.h \
+ include/margo-version.h \
+ include/margo-hg-shim.h
 
 TESTS_ENVIRONMENT =
 
 EXTRA_DIST += \
- prepare.sh 
+ prepare.sh
 
-AM_CPPFLAGS = -I$(top_srcdir)/include
+AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_builddir)/include
 
 AM_CFLAGS =
 
@@ -36,13 +40,14 @@ AM_LIBS =
 
 AM_CXXFLAGS = $(AM_CFLAGS)
 
-lib_LTLIBRARIES = src/libmargo.la
+lib_LTLIBRARIES = src/libmargo.la src/libmargo-hg-shim.la
 src_libmargo_la_SOURCES =
+src_libmargo_hg_shim_la_SOURCES =
 
-LDADD = src/libmargo.la
+LDADD = src/libmargo.la src/libmargo-hg-shim.la
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = maint/margo.pc
+pkgconfig_DATA = maint/margo.pc maint/margo-hg-shim.pc
 
 include Make.rules
 
