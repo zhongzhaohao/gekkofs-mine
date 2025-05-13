@@ -33,7 +33,7 @@
 #include <client/rpc/forward_management.hpp>
 #include <client/preload_util.hpp>
 #include <client/intercept.hpp>
-
+#include <client/open_file_map.hpp> /* --FGAP-- */
 #include <common/rpc/distributor.hpp>
 #include <common/common_defs.hpp>
 
@@ -231,6 +231,13 @@ init_environment() {
         request_registry();
     }
 
+    /* --FGAP-- */
+    CTX->file_tagmap()->get_tags_by_env();
+    CTX->file_tagmap()->get_set_fs_by_env();
+    //fgap_debug print what we get from env
+    CTX->file_tagmap()->print();
+    CTX->file_tagmap()->print_all_fs();
+    /* --FGAP-- */
 
     vector<pair<string, string>> hosts{};
     pair<vector<unsigned int>,vector<unsigned int>> hosts_config{};

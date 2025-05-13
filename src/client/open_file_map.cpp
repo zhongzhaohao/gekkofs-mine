@@ -33,6 +33,11 @@
 #include <client/preload_util.hpp>
 #include <client/logging.hpp>
 
+/* --FGAP-- */
+#include <cstdlib>  // getenv
+#include <fstream>  // read config
+/* --FGAP-- */
+
 extern "C" {
 #include <fcntl.h>
 }
@@ -240,3 +245,202 @@ OpenFileMap::get_fd_idx() {
 }
 
 } // namespace gkfs::filemap
+
+
+/* --FGAP-- */
+namespace gkfs::filetagmap {
+	
+FileTagMap::FileTagMap() {
+    //std::cout<< "[fgap_debug] FileTagMap initialized." << std::endl;
+    LOG(INFO, "[fgap_debug] FileTagMap initialized.");
+}	
+    
+//void FileTagMap::get_tags_by_env() {
+//	char* fileTagStr = std::getenv("FGAP_FILE_TAG"); // get env "FGAP_FILE_TAG"
+//	std::cout<< "[fgap_debug] in env: " << fileTagStr << std::endl;
+//        if (fileTagStr != nullptr) { 
+//	    std::cout << "[fgap_debug] parse env" << std::endl;
+//            std::istringstream stream(fileTagStr);
+//            std::string pair;
+//
+//            while (std::getline(stream, pair, ',')) {
+//                size_t colonPos = pair.find(':');
+//                if (colonPos != std::string::npos) {
+//                    std::string filename = pair.substr(0, colonPos);
+//                    std::string tag = pair.substr(colonPos + 1);
+//                    mapping_[filename] = tag; // store filename and tag
+//                }
+//            }
+//        } else {
+//		std::cout << "[fgap_debug] Environment variable FGAP_FILE_TAG is not set." << std::endl;
+//        }
+//}
+
+
+// fgap: set file tag using config file
+// usage: export FGAP_FILE_TAG=/path-to/file_tag.config
+// 	[/path-to/file_tag.config]:
+// 	file1 tag1
+// 	file2 tag2
+void FileTagMap::get_tags_by_env() {
+    char* filePath = std::getenv("FGAP_FILE_TAG"); // get env "FGAP_FILE_TAG"
+    //std::cout << "[fgap_debug] in env: " << filePath << std::endl;
+    LOG(INFO, "[fgap_debug] in env, FGAP_FILE_TAG: {}", filePath);
+    if (filePath != nullptr) {
+        //std::cout << "[fgap_debug] parsing file: " << filePath << std::endl;
+        LOG(INFO, "[fgap_debug] parsing file: [{}]", filePath);
+    std::ifstream file(filePath);
+
+        if (!file) {
+            std::cerr << "[fgap_debug] Error opening file: " << filePath << std::endl;
+            return;
+        }
+
+        std::string line;
+        while (std::getline(file, line)) {
+            std::istringstream stream(line);
+            std::string filename, tag;
+
+            if (stream >> filename >> tag) {
+                mapping_[filename] = tag; // store filename and tag
+            } else {
+                std::cerr << "[fgap_debug] Invalid format in line: " << line << std::endl;
+            }
+        }
+    } else {
+        //std::cout << "[fgap_debug] Environment variable FGAP_FILE_TAG is not set." << std::endl;
+    LOG(INFO, "[fgap_debug] Environment variable FGAP_FILE_TAG is not set.");
+    }
+}
+
+// Method to parse the FILE_TAG environment variable
+void FileTagMap::parse(std::string& fileTagStr) {
+    std::istringstream stream(fileTagStr);
+    std::string pair;
+
+    while (std::getline(stream, pair, ',')) {
+        size_t colonPos = pair.find(':');
+        if (colonPos != std::string::npos) {
+            std::string filename = pair.substr(0, colonPos);
+            std::string tag = pair.substr(colonPos + 1);
+            mapping_[filename] = tag;
+        }
+    }
+}
+
+// Method to check if a filename exists in the map
+bool FileTagMap::exist(std::string& filename) {
+    return mapping_.find(filename) != mapping_.end();
+}
+
+// Method to get tag by filename
+std::string FileTagMap::get_tag(std::string& filename) {
+    auto it = mapping_.find(filename);
+    if (it != mapping_.end()) {
+        return it->second; // return tag
+    } else {
+        return ""; // if not found, return null
+    }
+}
+
+// Method to print the contents of the map
+void FileTagMap::print() {
+    //std::cout << "[fgap_debug] Parsed FGAP_FILE_TAG:" << std::endl;
+    LOG(INFO, "[fgap_debug] Parsed FGAP_FILE_TAG");
+    for (const auto& entry : mapping_) {
+        //std::cout << "[fgap_debug] Filename: " << entry.first << ", Tag: " << entry.second << std::endl;
+    LOG(INFO, "[fgap_debug] Filename: [{}], Tag: {}", entry.first, entry.second);
+    }
+}
+
+// get and set backend filesystems by getenv "FGAP_FS"
+//void FileTagMap::get_set_fs_by_env() {
+//    const char* env_var = std::getenv("FGAP_FS"); // get env "FGAP_FS"
+//    if (!env_var) {
+//        std::cerr << "[fgap_debug] Environment variable FGAP_FS is not set." << std::endl;
+//        return;
+//    }
+//
+//    std::string fs_path(env_var); // convert to std::string
+//    std::istringstream ss(fs_path); // split string using istringstream
+//    std::string token;
+//    size_t index = 0;
+//
+//    // set token ',' to split string
+//    while (std::getline(ss, token, ',') && index < fs_array_.size()) {
+//        fs_array_[index++] = token; // store fs to fs_array
+//    }
+//
+//    // set the remaining array space to null
+//    for (; index < fs_array_.size(); ++index) {
+//        fs_array_[index] = ""; 
+//    }
+//}
+
+
+// fgap: set filesystems using config file
+// usage: export FGAP_FS=/path-to/fs.config
+//      [/path-to/fs.config]:
+//      0 fs0
+//      1 fs1
+// NOTE: Some Index conflict judgments are missing [TODO]
+void FileTagMap::get_set_fs_by_env() {
+    const char* env_var = std::getenv("FGAP_FS"); // get env "FGAP_FS"
+    if (!env_var) {
+        std::cerr << "[fgap_debug] Environment variable FGAP_FS is not set." << std::endl;
+        return;
+    }
+
+    std::string config_file_path(env_var); // convert to std::string
+    //std::cout << "[fgap_debug] FGAP_FS in env: " << config_file_path << std::endl;
+    LOG(INFO, "[fgap_debug] FGAP_FS in env: {}", config_file_path);
+    std::ifstream file(config_file_path);
+
+    if (!file) {
+        std::cerr << "[fgap_debug] Error opening file: " << config_file_path << std::endl;
+        return;
+    }
+
+    for (size_t i = 0; i < fs_array_.size(); ++i) {
+        fs_array_[i] = "";
+    }
+
+    std::string line;
+    size_t index = 0;
+
+    while (std::getline(file, line)) {
+        // Split line into index and path
+        std::istringstream ss(line);
+        std::string idx_str, path;
+
+        if (ss >> idx_str >> path) {
+            index = std::stoul(idx_str); // Convert the index from string to size_t
+            if (index < fs_array_.size()) {
+                fs_array_[index] = path; // Store the path in fs_array_
+            } else {
+                std::cerr << "[fgap_debug] Index out of bounds: " << index << std::endl;
+            }
+        } else {
+            std::cerr << "[fgap_debug] Invalid format in line: " << line << std::endl;
+        }
+    }
+
+}
+
+std::string FileTagMap::get_fs_at_index(size_t index) const {
+    if (index >= fs_array_.size()) {
+        return ""; // return null for out of bounds
+    }
+    return fs_array_[index];
+}
+
+void FileTagMap::print_all_fs() {
+    for (size_t i = 0; i < fs_array_.size(); ++i) {
+        //std::cout << "[fgap_debug] fs[" << i << "] = " << fs_array_[i] << std::endl;
+        LOG(INFO, "[fgap_debug] fs[{}] = {}", i, fs_array_[i]); 
+    }
+}
+
+
+} // end namespace gkfs::filetagmap
+/* --FGAP-- */

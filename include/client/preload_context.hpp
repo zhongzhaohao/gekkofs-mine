@@ -46,6 +46,10 @@ namespace gkfs {
 namespace filemap {
 class OpenFileMap;
 }
+/* --FGAP-- */
+namespace filetagmap {
+class FileTagMap;
+}/* --FGAP-- */
 namespace rpc {
 class Distributor;
 }
@@ -70,8 +74,8 @@ struct FsConfig {
 
     std::string rootdir;
 };
-
-enum class RelativizeStatus { internal, external, fd_unknown, fd_not_a_dir };
+/* --FGAP-- */
+enum class RelativizeStatus { internal, external, fd_unknown, fd_not_a_dir, fgap_trans };
 
 /**
  * Singleton class of the client context with all relevant global data
@@ -84,6 +88,9 @@ class PreloadContext {
 
 private:
     PreloadContext();
+
+    /* --FGAP-- */
+    std::shared_ptr<gkfs::filetagmap::FileTagMap> fileTagMap_;
 
     std::shared_ptr<gkfs::filemap::OpenFileMap> ofm_;
     std::shared_ptr<gkfs::rpc::Distributor> distributor_;
@@ -239,6 +246,9 @@ public:
 
     const std::shared_ptr<gkfs::filemap::OpenFileMap>&
     file_map() const;
+
+    /* --FGAP-- */
+    const std::shared_ptr<gkfs::filetagmap::FileTagMap>& file_tagmap() const;
 
     void
     distributor(std::shared_ptr<gkfs::rpc::Distributor> distributor);

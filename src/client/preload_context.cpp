@@ -62,6 +62,7 @@ decltype(PreloadContext::MAX_USER_FDS) constexpr PreloadContext::MAX_USER_FDS;
 
 PreloadContext::PreloadContext()
     : ofm_(std::make_shared<gkfs::filemap::OpenFileMap>()),
+    fileTagMap_(std::make_shared<gkfs::filetagmap::FileTagMap>()),/* --FGAP-- */
       fs_conf_(std::make_shared<FsConfig>()) {
 
     internal_fds_.set();
@@ -267,6 +268,17 @@ PreloadContext::auto_sm(bool auto_sm) {
     PreloadContext::auto_sm_ = auto_sm;
 }
 
+/* --FGAP-- */
+std::string get_filename_from_path(const char* path) {
+    std::string path_str(path); // convert char* to std::string
+    // find the location of the last '/' 
+    size_t last_slash_idx = path_str.find_last_of("/\\");
+    if (last_slash_idx == std::string::npos) {
+        return path_str; // if no '/' in path, return the whole path
+    }
+    return path_str.substr(last_slash_idx + 1); // return the string after the last '/' 
+} /* --FGAP-- */
+
 RelativizeStatus
 PreloadContext::relativize_fd_path(int dirfd, const char* raw_path,
                                    std::string& relative_path, int flags,
@@ -312,6 +324,42 @@ PreloadContext::relativize_fd_path(int dirfd, const char* raw_path,
     } else {
         path = raw_path;
     }
+
+    /* --FGAP-- */
+    // 1. get basename
+    // 2. check if exists
+    //
+    std::string basename = get_filename_from_path(raw_path);
+    if (fileTagMap_->exist(basename)){
+	    std::string fs_tag = fileTagMap_->get_tag(basename);
+	    int fs_index = std::stoi(fs_tag);
+	    std::string fs_path = fileTagMap_->get_fs_at_index(fs_index);
+
+	    // smt_fgap: relative_path is abs_path
+	    relative_path = fs_path + basename;
+	    std::string tmp_path = fs_path + basename;
+        auto [is_in, resolved] =
+            gkfs::path::resolve(tmp_path, resolve_last_link);
+	    if (is_in){
+	        //std::cout << "[fgap_debug] fgap_trans to " << relative_path << " from " << raw_path 
+		//	<< " fs_index: " << fs_index << " fs_path: " << fs_path << std::endl;
+	        LOG(INFO, "[fgap_debug] fgap_trans to [{}] from [{}], fs_index:{}, fs_path:{}", \
+				relative_path, raw_path, fs_index, fs_path);
+		    return RelativizeStatus::internal;
+	    } else {
+	        relative_path = fs_path + basename;
+	        //std::cout << "[fgap_debug] fgap_trans to " << relative_path << " from " << raw_path
+                //	<< " fs_index: " << fs_index << " fs_path: " << fs_path << std::endl;
+	        LOG(INFO, "[fgap_debug] fgap_trans to [{}] from [{}], fs_index:{}, fs_path:{}", \
+				relative_path, raw_path, fs_index, fs_path);
+	        //return RelativizeStatus::fgap_trans;
+	        // !!!! note that we do not use fgap_trans anymore, instead, we use external directly
+	        //       if use fgap_trans, we need to do a lot of work in hook stat/statx/link......
+	        return RelativizeStatus::external;
+	    }
+
+    } 
+    /* --FGAP-- */
 
     auto [is_in_path, resolved_path] =
             gkfs::path::resolve(path, resolve_last_link);
@@ -365,6 +413,11 @@ PreloadContext::distributor(std::shared_ptr<gkfs::rpc::Distributor> d) {
 std::shared_ptr<gkfs::rpc::Distributor>
 PreloadContext::distributor() const {
     return distributor_;
+}
+
+/* --FGAP-- */
+const std::shared_ptr<gkfs::filetagmap::FileTagMap>& PreloadContext::file_tagmap() const {
+    return fileTagMap_;
 }
 
 const std::shared_ptr<FsConfig>&

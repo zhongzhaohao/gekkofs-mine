@@ -71,6 +71,7 @@ hook_openat(int dirfd, const char* cpath, int flags, mode_t mode) {
                                                 mode);
 
         case gkfs::preload::RelativizeStatus::external:
+            LOG(INFO,"[fgap_debug] external, dirfd: {}, resolved.c_str(): {}", dirfd, resolved.c_str());
             return syscall_no_intercept_wrapper(SYS_openat, dirfd,
                                                 resolved.c_str(), flags, mode);
 
@@ -79,6 +80,12 @@ hook_openat(int dirfd, const char* cpath, int flags, mode_t mode) {
 
         case gkfs::preload::RelativizeStatus::internal:
             return with_errno(gkfs::syscall::gkfs_open(resolved, mode, flags));
+
+        /* --FGAP-- */
+        case gkfs::preload::RelativizeStatus::fgap_trans:
+	        LOG(INFO,"[fgap_debug] case fgap_trans: openat() dirfd: {}, resolved.c_str(): {}, flags: {}, mode: {}", dirfd,  resolved.c_str(), flags, mode);
+	        return syscall_no_intercept(SYS_openat, dirfd, resolved.c_str(), flags, mode);
+        /* --FGAP-- */
 
         default:
             LOG(ERROR, "{}() relativize status unknown: {}", __func__);

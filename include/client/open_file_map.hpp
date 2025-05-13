@@ -36,7 +36,7 @@
 #include <atomic>
 #include <array>
 #include <string>
-
+#include <unordered_map> /* --FGAP-- */
 namespace gkfs::filemap {
 
 /* Forward declaration */
@@ -156,5 +156,55 @@ public:
 };
 
 } // namespace gkfs::filemap
+
+/* --FGAP-- 
+* define namespace gkfs::filetagmap
+*/
+namespace gkfs::filetagmap {
+
+class FileTagMap {
+    
+private:
+    std::unordered_map<std::string, std::string> mapping_;
+    std::mutex map_mutex; // lock to protect the map accessing concurrently
+
+    std::array<std::string, 30> fs_array_; // 30 fs types
+
+
+
+public:
+
+    FileTagMap();
+
+    ~FileTagMap() = default;
+
+    // Method to parse the FILE_TAG environment variable
+    void get_tags_by_env();
+    
+    // Method to parse the input string
+    void parse(std::string& fileTagStr);
+
+    // Method to check if a filename exists in the map
+    bool exist(std::string& filename);
+
+    // Method to get tag of filenamme
+    std::string get_tag(std::string& filename);
+
+    // Method to print the contents of the map
+    void print();
+
+    // set fs_array_ by "FGAP_FS" env
+    void get_set_fs_by_env();
+
+    // return fs_array_[index]
+    std::string get_fs_at_index(size_t index) const;
+
+    void print_all_fs();
+
+};
+    
+    
+} // end namespace gkfs::filetagmap
+/* --FGAP-- */
 
 #endif // GEKKOFS_OPEN_FILE_MAP_HPP

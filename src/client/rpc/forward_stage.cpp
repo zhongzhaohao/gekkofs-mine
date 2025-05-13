@@ -23,7 +23,7 @@ forward_stage(size_t host_id, const std::string& in_path, const std::string& out
     try {
         LOG(DEBUG, "Forwarding staging infomations.");
 
-        out = ld_network_service->post<gkfs::rpc::stage>(endp,in).get().at(0);
+        out = ld_network_service->post<gkfs::rpc::stage>(endp,in).get(1200).at(0);
         
         LOG(DEBUG, "Got response success: {}", out.err());
 
