@@ -105,7 +105,7 @@ static void clear_all_pathfs(){
  * Cache fs id where path exists through get_metadata(path)
  * @param path
  */
-static void add_one_pathfs(std::string path, const char * f){
+static void add_one_pathfs(std::string path){
     std::vector<unsigned int> fs_list;
     if(CTX->hostsconfig().size() > 1 ){
         if(!CTX->pathfs().count(path)){
