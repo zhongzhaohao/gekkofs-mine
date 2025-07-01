@@ -7,20 +7,22 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <iostream>
 #include <vector>
 #include <sstream>
 #include <fstream>
 #include <set>
 #include <queue>
+
 #include <registry/my-rpc.hpp>
+#include <registry/utils.hpp>
 
 #include <common/rpc/rpc_types.hpp>
+#include <common/registry_merge_tree.hpp>
+#include <algorithm>
 
-static int merge_files(){
-    return 0;
-
-}
 
 /**
  * @brief Responds to merge request from client 
@@ -43,69 +45,58 @@ rpc_srv_registry_request(hg_handle_t handle)
     auto flows = in.merge_flows;
     auto hfile = in.merge_hfile;
     auto hcfile = in.merge_hcfile;
-
+    auto flow_name = in.flow;
+    std::cout<< flows<<" " << hcfile <<" "<< hfile <<" "<< flow_name<<std::endl;
     try {
-            std::stringstream ss(flows);
-            std::string flow;
-            //Separate the flows with; , flow_arr stores all the work flows to be soon merged
-            while (std::getline(ss, flow, ';')) {
-                flow_arr.push_back(flow);
-            }
-            std::priority_queue<fs_info> all_fs_info; // save fs information (priority and daemons vector) sorted by the priority of fs
-            std::set<std::string> all_daemons;//check for duplicate daemons and suitable for multi-layer fusion GekkoFS
-            //search the hfiles and hcfiles of merge_flows and merge them to merge_hfile and merge_hcfile
-            for(int i = 0 ; i < flow_arr.size(); i ++){
-                if(!job_flows.count(flow_arr[i])) {
-                    std::cout<< "we can't find flow names " << flow_arr[i] <<std::endl;
-                    continue;
-                }
-                // open hfile and hcfile of flow i
-                std::ifstream hcf(job_flows[flow_arr[i]].first);
-                std::ifstream hf(job_flows[flow_arr[i]].second);
-
-                if (hcf.is_open() && hf.is_open()) {
-                    std::string line;
-                    while (std::getline(hcf, line)) { //every line contains two number: fs daemons count and fs priority 
-                        struct fs_info fsinfo;
-                        fsinfo.priority = i;
-
-                        std::stringstream ss(line);
-                        unsigned int fsdaemons,fspriority;
-                        ss>> fsdaemons >> fspriority;
-                        fsinfo.post_priority = fspriority;
-
-                        for (int k = 0; k < fsdaemons; ++k) { //save all daemon addrs of this fs 
-                            if (std::getline(hf, line)) { //every line contains a daemon addr
-                                if(all_daemons.count(line))
-                                    continue;
-                                all_daemons.insert(line);
-                                fsinfo.daemon_addrs.push_back(line);
-                            }
-                                
-                        }
-                        if(fsinfo.daemon_addrs.size() > 0)
-                            all_fs_info.push(fsinfo);
-                        
-                    }
-                }
-                hcf.close();
-                hf.close();
-            }
-        //写入文件
-        std::ofstream hcf(hcfile);
-        std::ofstream hf(hfile);
-        unsigned int prior = 1;
-        while(!all_fs_info.empty()){
-            fs_info fsinfo = all_fs_info.top();
-            all_fs_info.pop();
-            hcf << fsinfo.daemon_addrs.size() << " " << prior <<std::endl;
-            prior ++;
-            for(auto addr : fsinfo.daemon_addrs){
-                hf << addr << std::endl;
-            }
+        std::stringstream ss(flows);
+        std::string flow;
+        //Separate the flows with; , flow_arr stores all the work flows to be soon merged
+        while (std::getline(ss, flow, ';')) {
+            flow_arr.push_back(flow);
         }
-        hcf.close();
+        
+        //write to file 
+        {
+            std::ofstream clearFile(hfile, std::ios::trunc); 
+        }
+        std::ofstream hf(hfile, std::ios::app);
+        std::set<std::string> rootflows;
+        for (const auto& fl : flow_arr) {
+            auto root_fl = tree_manager.flownameToRoot[fl]->flowname;
+            std::cout<< "root_Fl "<<root_fl << std::endl;
+            if(rootflows.count(root_fl)) continue;
+            rootflows.insert(root_fl);
+            std::string fl_hfile = job_flows[root_fl].hfile;
+            std::cout<<"fl_hfile " << fl_hfile<< std::endl;
+            std::ifstream src(fl_hfile);
+            if (!src.is_open()) {
+                throw std::runtime_error("无法打开源文件: " + fl_hfile);
+            }
+
+            std::string line;
+            while (std::getline(src, line)) {
+                //debug
+                std::cout<< "line is "<<line << std::endl;
+                if (!line.empty() && !std::all_of(line.begin(), line.end(), ::isspace)) {
+                    hf << line << std::endl;
+                }
+            }
+            src.close();
+        }
         hf.close();
+
+        std::time_t time;
+        std::time(&time);
+        TreeNodePtr mergedRoot = tree_manager.mergeTrees(
+            flow_name, 1, time, flow_arr
+        );
+        tree_manager.addTree(mergedRoot);
+        TreeSerializer serializer;
+        serializer.serializeTreeToFile(mergedRoot, hcfile);
+        job_flows[flow_name] = {hfile,hcfile,count_file_lines(hfile), fs::last_write_time(hfile)};
+        // set read only
+        chmod(hfile, S_IRUSR | S_IRGRP | S_IROTH);
+        chmod(hcfile, S_IRUSR | S_IRGRP | S_IROTH);
 
     }   catch(const std::exception& e) {
             std::cout<< "Failed to respond my rpc ult\n" << e.what();
@@ -145,8 +136,45 @@ rpc_srv_registry_register(hg_handle_t handle)
     auto hcfile = in.hcfile;
     try {
         //Store the hostconfigfile and hostfile of the system where the workflow is located
+        //if flow exists: 
+        //hfile path different: allow change and del whole old merge tree where flow exists
+        //hfile not modified--same flow as before, do nothing
+        //hfile modified--allow change and del whole old tree where flow exists
+        //changjing: 融合树的子树register,no worry?
+        // TODO registry掉线重启(suppose never down)
+        // TODO mergefile is previous one，注册工作流(hard to recognize)
+        // TODO Add flow create time: what if registry getdown
         std::cout<< flow<<" " << hcfile <<" "<< hfile <<std::endl;
-        job_flows[flow] = {hcfile,hfile} ;
+        unsigned int lines = count_file_lines(hfile);
+        auto last_modified_time = fs::last_write_time(hfile);
+        flow_info finfo = {hfile, hcfile, lines, last_modified_time};
+        if(job_flows.count(flow)){
+            std::string old_hfile = job_flows[flow].hfile;
+            if(old_hfile == hfile){
+                if(check_file_modified(hfile, job_flows[flow].last_modified_time)){
+                    std::cout<< "modified "<< std::endl;
+                    // auto root = tree_manager.flownameToRoot[flow];
+                    // tree_manager.flownameToRoot.erase(root.flowname);
+                    job_flows[flow] = finfo;
+                    auto flow_node = std::make_shared<TreeNode>(flow, 1, count_file_lines(hfile));
+                    tree_manager.addTree(flow_node);
+                } else {
+                    std::cout<< "no modified. "<< std::endl;
+                    ; //do nothing 
+                }
+            } else {
+                std::cout<< "new file and we flush it"<< std::endl;
+                job_flows[flow] = finfo;
+                auto flow_node = std::make_shared<TreeNode>(flow, 1, count_file_lines(hfile));
+                tree_manager.addTree(flow_node);
+            }
+        } else {
+            std::cout<< "no such flow "<< std::endl;
+            job_flows[flow] = finfo;
+            auto flow_node = std::make_shared<TreeNode>(flow, 1, count_file_lines(hfile));
+            tree_manager.addTree(flow_node);
+        }
+
     } catch(const std::exception& e) {
         out.err = -1;
     }

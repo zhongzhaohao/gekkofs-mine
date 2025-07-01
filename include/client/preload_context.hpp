@@ -31,6 +31,8 @@
 #define GEKKOFS_PRELOAD_CTX_HPP
 
 #include <common/bloom_filter.hpp>
+#include <common/thread_pool.hpp>
+#include <common/fs_info.hpp>
 #include <hermes.hpp>
 #include <map>
 #include <mercury.h>
@@ -96,11 +98,11 @@ private:
     /* --Multiple GekkoFS-- */
     hermes::endpoint registry_; // Registry endp
     bool use_registry_; // Use or not
-    std::vector<unsigned int> hostsconfig_; // Host(Daemon) size of Each GekkoFS
-    std::vector<unsigned int> fspriority_;  // FsPriority of Each GekkoFS -- used for data consistency
+    std::vector<fs_info> hostsconfig_; // Host(Daemon) config of Each GekkoFS
     std::map<std::string, unsigned int> pathfs_; // Cache of GekkoFS id where path exists
     uint64_t local_fs_id_; // Id of GekkoFS having local host(daemon)
     std::vector<bloom_filter> bloom_filter_vec_;  //bloom filter
+    ThreadPool thread_pool_; // thread pool
     /* --Multiple GekkoFS-- */
 
     std::vector<hermes::endpoint> hosts_;
@@ -175,18 +177,11 @@ public:
     void
     use_registry(bool use);
 
-    const std::vector<unsigned int>&
+    const std::vector<fs_info>&
     hostsconfig() const;
 
     void
-    hostsconfig(const std::vector<unsigned int>& hostsconfig);
-
-    const std::vector<unsigned int>&
-    fspriority() const;
-
-    void
-    fspriority(const std::vector<unsigned int>& hostsconfig);
-
+    hostsconfig(const std::vector<fs_info>& hostsconfig);
 
     std::map<std::string, unsigned int>&
     pathfs() ; 
@@ -199,6 +194,12 @@ public:
 
     std::vector<bloom_filter>&
     bloom_filter_vec();
+
+    void
+    init_threadpool(size_t thread_count);
+
+    ThreadPool& 
+    thread_pool();
     /* --Multiple GekkoFS-- */
 
     void

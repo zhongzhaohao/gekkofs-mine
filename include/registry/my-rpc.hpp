@@ -9,21 +9,20 @@
 
 #include <margo.h>
 #include <map>
-/* visible API for example RPC operation */
-struct fs_info {
-    public: 
-        unsigned int priority, post_priority;
-        std::vector<std::string> daemon_addrs;
-    
-    bool operator<(const fs_info& other) const {
-        if (priority != other.priority) {
-            return priority > other.priority;
-        }
-        return post_priority > other.post_priority;
-    }
+#include <common/registry_merge_tree.hpp>
+#include <filesystem>
+#include <fstream>
+namespace fs = std::filesystem;
+
+struct flow_info {
+    std::string hfile;
+    std::string hcfile;
+    unsigned int lines;
+    fs::file_time_type last_modified_time;
 };
 
-static std::map< std::string, std::pair<std::string, std::string> > job_flows; 
+static std::map<std::string, flow_info> job_flows; 
+static TreeManager tree_manager;
 
 DECLARE_MARGO_RPC_HANDLER(rpc_srv_registry_request)
 

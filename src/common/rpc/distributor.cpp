@@ -45,14 +45,11 @@ using gkfs::utils::arithmetic::last_smaller_equal;
  * @param localfs id of GekkoFS having local daemon
  */
 SimpleHashDistributor::SimpleHashDistributor(host_t localhost,
-                                             std::vector<unsigned int> hosts_size,
+                                             std::vector<std::pair<unsigned int, unsigned int> > hosts_size,
                                              std::map<std::string, unsigned int>* pathfs,
                                              host_t localfs)
     : localhost_(localhost), hosts_size_(hosts_size), pathfs_(pathfs), localfs_(localfs),
-    all_hosts_(
-        std::accumulate(hosts_size.begin(), hosts_size.end(), 0, [](unsigned int x, unsigned int y) {
-        return x+y;})
-    ) {
+    all_hosts_(hosts_size[localfs].second) {
     ::iota(all_hosts_.begin(), all_hosts_.end(), 0);
 }
 
@@ -108,15 +105,13 @@ SimpleHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
                                    const int num_copy) const {
     unsigned int fs_id = localfs_;
     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
-    unsigned int prefix_hosts = 0;
-    for(unsigned int fs = 0 ;fs < fs_id ; fs++)
-        prefix_hosts += hosts_size_[fs];
+    unsigned int prefix_hosts = hosts_size_[fs_id].first;
     if(!cfg::use_PFL)
         return (str_hash(path + ::to_string(chnk_id)) + num_copy) 
-                                        % hosts_size_.at(fs_id) + prefix_hosts;    
+                                        % hosts_size_.at(fs_id).second + prefix_hosts;    
     // /*  --PFL implementation-- */
     auto cpn = last_smaller_equal(cfg::PFLchunkID, chnk_id);
-    auto host_size = hosts_size_.at(fs_id);
+    auto host_size = hosts_size_.at(fs_id).second;
     auto stripe_count = min(cfg::PFLcount[cpn], host_size);
     auto hash = str_hash(path + ::to_string(chnk_id)) + num_copy;
     //locate first host in hosts
@@ -141,22 +136,20 @@ host_t
 SimpleHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
                                    unsigned int hosts_size,
                                    const int num_copy) {
-    if(hosts_size_.at(0) != hosts_size) {
-        hosts_size_.at(0) = hosts_size;
+    if(hosts_size_.at(0).second != hosts_size) {
+        hosts_size_.at(0).second = hosts_size;
         all_hosts_ = std::vector<unsigned int>(hosts_size);
         ::iota(all_hosts_.begin(), all_hosts_.end(), 0);
     }
     unsigned int fs_id = localfs_;
     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
-    unsigned int prefix_hosts = 0;
-    for(unsigned int fs = 0 ;fs < fs_id ; fs++)
-        prefix_hosts += hosts_size_[fs];
+    unsigned int prefix_hosts = hosts_size_[fs_id].first;
     if(!cfg::use_PFL)
         return (str_hash(path + ::to_string(chnk_id)) + num_copy) 
-                                        % hosts_size_.at(fs_id) + prefix_hosts;  
+                                        % hosts_size_.at(fs_id).second + prefix_hosts;  
     // /*  --PFL implementation-- */  
     auto cpn = last_smaller_equal(cfg::PFLchunkID, chnk_id);
-    auto host_size = hosts_size_.at(fs_id);
+    auto host_size = hosts_size_.at(fs_id).second;
     auto stripe_count = min(cfg::PFLcount[cpn], host_size);
     auto hash = str_hash(path + ::to_string(chnk_id)) + num_copy;
     //locate first host in hosts
@@ -178,12 +171,10 @@ SimpleHashDistributor::locate_host_set(const string& path, const uint64_t size,
 
     unsigned int fs_id = localfs_;
     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
-    unsigned int prefix_hosts = 0;
-    for(unsigned int fs = 0 ;fs < fs_id ; fs++)
-        prefix_hosts += hosts_size_[fs];
+    unsigned int prefix_hosts = hosts_size_[fs_id].first;
 
     std::set<host_t> host_set;
-    auto host_size = hosts_size_.at(fs_id);
+    auto host_size = hosts_size_.at(fs_id).second;
     auto end_cpn = last_smaller_equal(cfg::PFLlayout, size);
     //hosts before end component 
     for(uint32_t cpn = 0; cpn < end_cpn; cpn ++){
@@ -218,10 +209,9 @@ SimpleHashDistributor::locate_file_metadata(const string& path,
                                             const int num_copy) const {
     unsigned int fs_id = localfs_;
     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
-    unsigned int prefix_hosts = 0;
-    for(unsigned int fs = 0 ;fs < fs_id ; fs++)
-        prefix_hosts += hosts_size_[fs];
-    return (str_hash(path) + num_copy) % hosts_size_.at(fs_id) + prefix_hosts;
+    unsigned int prefix_hosts = hosts_size_[fs_id].first;
+    
+    return (str_hash(path) + num_copy) % hosts_size_.at(fs_id).second + prefix_hosts;
 }
 
 /**
@@ -232,10 +222,9 @@ SimpleHashDistributor::locate_file_metadata_fs(const string& path,
                                             const int num_copy, const int fs) const {
     unsigned int fs_id = fs;
     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
-    unsigned int prefix_hosts = 0;
-    for(unsigned int fs = 0 ;fs < fs_id ; fs++)
-        prefix_hosts += hosts_size_[fs];
-    return (str_hash(path) + num_copy) % hosts_size_.at(fs_id) + prefix_hosts;
+    unsigned int prefix_hosts = hosts_size_[fs_id].first;
+
+    return (str_hash(path) + num_copy) % hosts_size_.at(fs_id).second + prefix_hosts;
 }
 
 /**
@@ -249,11 +238,9 @@ SimpleHashDistributor::locate_directory_metadata(const string& path) const {
         return all_hosts_;
     if(pathfs_ && pathfs_->count(path)){
         unsigned int fs_id = (*pathfs_)[path];
-        unsigned int prefix_hosts = 0;
-        for(unsigned int fs = 0 ;fs < fs_id ; fs++)
-            prefix_hosts += hosts_size_[fs];
+        unsigned int prefix_hosts = hosts_size_[fs_id].first;
         vector<host_t> target_hosts(all_hosts_.begin() + prefix_hosts, 
-                                    all_hosts_.begin() + prefix_hosts + hosts_size_[fs_id]);
+                                    all_hosts_.begin() + prefix_hosts + hosts_size_[fs_id].second);
         return target_hosts;   
     } 
     return all_hosts_;

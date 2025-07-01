@@ -125,7 +125,6 @@ forward_getSuccessResponseThread(void* data){
             LOG(ERROR, "while getting rpc output");
             statfs_args->err = EBUSY;
         }
-   pthread_exit(NULL);
 
 }
 
@@ -139,23 +138,14 @@ forward_getSuccessResponseThread(void* data){
 int
 forward_stat(const std::string& path, string& attr, const int copy) {
     /* --Multiple GekkoFS--*/
-    auto hostsconfig_array = CTX->hostsconfig(); //Vector: Number of host(Daemon) of all Single GekkoFS
-    auto priority_array = CTX->fspriority(); // Vector: FsPriorityV of all Single GekkoFS
+    auto hostsconfig_array = CTX->hostsconfig(); //Vector: config of all Single GekkoFS
     int total_fs_num = hostsconfig_array.size(); // Number of all Single GekkoFS
     LOG(DEBUG, "{}(), path: {}", __func__, path);
     if(total_fs_num > 1){ 
-        std::vector<int> prefix_num_array;
-        for(int i = 0; i < total_fs_num; i++){
-            if(i > 0){
-                prefix_num_array.push_back(prefix_num_array[i-1]+hostsconfig_array[i-1]);
-            }else{
-                prefix_num_array.push_back(0);
-            }
-        }
-
         std::vector<unsigned int> fs_list;
+        //TODO make sure which fs if multiple fs hash to the same
         if(!CTX->pathfs().count(path)){
-            for(int fs = 0; fs < CTX->hostsconfig().size(); fs++){
+            for(unsigned int fs = 0; fs < CTX->hostsconfig().size(); fs++){
                 auto id = CTX->distributor()->locate_file_metadata_fs(path, copy, fs);
                 if (CTX->bloom_filter_vec().at(id).contains(path)){
                     fs_list.push_back(fs);
@@ -167,27 +157,44 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         } else {
             fs_list.push_back(CTX->pathfs()[path]);
         }
+        // for(auto thing: fs_list){
+        //     std::cout<< "stat path: "<< path <<" at fs_list is " << thing << std::endl;
+        // }
+
 
         total_fs_num = fs_list.size();
-        pthread_t threads[total_fs_num];
+        std::vector<std::future<void>> futures(total_fs_num);
         forward_stat_fs_args statfs_args[total_fs_num];
         vector<pair<unsigned int, string>> founds;
+        auto &thread_pool = CTX->thread_pool();
 
         for(int i = 0; i < total_fs_num; i++){
             auto fs = fs_list[i];
             statfs_args[i].fsId = fs;
-            statfs_args[i].hostsize_single = hostsconfig_array[fs];
-            statfs_args[i].prefix_num = prefix_num_array[fs];
+            statfs_args[i].hostsize_single = hostsconfig_array[fs].size;
+            statfs_args[i].prefix_num = hostsconfig_array[fs].prefix;
             statfs_args[i].path = path;
             statfs_args[i].attr = attr;
             statfs_args[i].copy = copy;
-            pthread_create(&threads[i], NULL, forward_getSuccessResponseThread, &statfs_args[i]);
+
+            if(total_fs_num == 1){
+                forward_getSuccessResponseThread(&statfs_args[i]);
+            } else {
+                futures[i] = thread_pool.enqueue([&statfs_args, i]() {
+                    forward_getSuccessResponseThread(&statfs_args[i]);
+                });
+            }
+
         }
         int failedCount=0;
         for(int i = 0; i < total_fs_num; i++){
             auto fs = fs_list[i];
-            if (pthread_join(threads[i], NULL) != 0) {
-                LOG(ERROR, "Error joining thread to GekkoFS ID: '{}'", i);
+            try {
+                if(total_fs_num != 1){
+                    futures[i].get();
+                }
+            } catch (const std::exception& e) {
+                LOG(ERROR, "Thread pool exception: {}", e.what());
             }
             if(!statfs_args[i].result) {
                 founds.push_back({fs,statfs_args[i].attr});
@@ -201,13 +208,20 @@ forward_stat(const std::string& path, string& attr, const int copy) {
             }
         }
         // data consistency based on fspriority
-        for(auto find : founds) {
+        for(auto &find : founds) {
+            gkfs::metadata::Metadata md(find.second);
+            // std::cout<< "fs :" << find.first << " meta.ctime: "<<md.ctime() << std::endl; 
+            if(!(hostsconfig_array[find.first].life_start <= md.ctime() &&
+                 hostsconfig_array[find.first].life_end >= md.ctime()) ){
+                continue; //this means metadata is created outside this fs lifetime;
+            }
             auto fsid = CTX->pathfs()[path];
-            if(priority_array[find.first] < priority_array[fsid]){
+            if(hostsconfig_array[find.first].priority < hostsconfig_array[fsid].priority){
                 CTX->pathfs()[path] = find.first;
                 attr = find.second;
             }
         }
+        // std::cout<< "path: "<< path <<" at pathfs is " << CTX->pathfs()[path] << std::endl;
     /* --Multiple GekkoFS--*/
     } else {
         auto endp = CTX->hosts().at(

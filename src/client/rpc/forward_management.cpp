@@ -142,11 +142,11 @@ forward_get_bloom_filter() {
  * @param hfile target hostfile of Merge GekkoFS for Registry to generate
  */
 int
-forward_request_registry(std::string flows, std::string hcfile, std::string hfile) {
+forward_request_registry(std::string flows, std::string hcfile, std::string hfile, std::string workflow) {
 
     auto endp = CTX->registry();
     gkfs::rpc::registry_request::output out;
-    gkfs::rpc::registry_request::input in(flows, hcfile, hfile);
+    gkfs::rpc::registry_request::input in(flows, hcfile, hfile, workflow);
    
     try {
         LOG(DEBUG, "Retrieving merge files from registry");

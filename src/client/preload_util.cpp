@@ -36,6 +36,7 @@
 #include <common/rpc/rpc_util.hpp>
 #include <common/env_util.hpp>
 #include <common/common_defs.hpp>
+#include <common/registry_merge_tree.hpp>
 
 #include <hermes.hpp>
 
@@ -405,10 +406,6 @@ bool CheckMerge(string &mergeflows,string &hostfile,string &hostconfigfile) {
 
     auto merge = gkfs::env::get_var(gkfs::env::MERGE,
                                   gkfs::config::merge_default);
-    hostfile = gkfs::env::get_var(gkfs::env::HOSTS_FILE,
-                                  gkfs::config::hostfile_path);  
-    hostconfigfile = gkfs::env::get_var(gkfs::env::HOSTS_CONFIG_FILE,
-                                  gkfs::config::hostfile_config_path);
     mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
                                   "");
 
@@ -454,39 +451,29 @@ read_registry_file() {
 /**
  * --Mulitple GekkoFS--
  * Get HostSize(number of daemon) and FsPriority of Each GekkoFS
- * @return pair<hostsize_vector, priority_vector>
  */
-pair<vector<unsigned int>,vector<unsigned int> >
-read_hosts_config_file(unsigned int all_hosts) {
-    if(!CTX->use_registry())
-        return {{all_hosts},{1}};
+void 
+read_hosts_config_file(std::vector<fs_info>& hostconfig, 
+                       unsigned int all_hosts) {
+    if(!CTX->use_registry()){
+        fs_info fs_conf = {0, all_hosts, 1, TimeMin, TimeMax};
+        hostconfig.push_back(fs_conf);
+        return ;
+    }
     string hostconfigfile;
-    unsigned int hostconfigfile_hosts = 0, hostfile_hosts = all_hosts;
     hostconfigfile = gkfs::env::get_var(gkfs::env::HOSTS_CONFIG_FILE,
                                   gkfs::config::hostfile_config_path);
-    ifstream lf(hostconfigfile);
-    string line;
-    vector<unsigned int> hcfile,fspriority;
-    while (getline(lf, line)){
-        std::istringstream iss(line);
-        unsigned int x,y;
-        if(!(iss >> x >> y)){
-            throw runtime_error(fmt::format("Invalid file format: '{}'", hostconfigfile));
-        }
-        hcfile.push_back(x);
-        hostconfigfile_hosts += x;
-        fspriority.push_back(y);
-    }
-    
-    if(hcfile.empty()) {
-        throw runtime_error(fmt::format("HostConfigfile empty: '{}'", hostconfigfile));
+
+    TreeSerializer serializer;
+    auto root = serializer.deserializeTreeFromFile(hostconfigfile);
+    root->generatePositionVectors(hostconfig, 0);
+
+    if(hostconfig.empty()) {
+        fs_info fs_conf = {0, all_hosts, 1, TimeMin, TimeMax};
+        hostconfig.push_back(fs_conf);
     }
 
-    LOG(INFO, "Hosts config pool size: {}", hcfile.size());
-    if(hostconfigfile_hosts != hostfile_hosts){
-        throw runtime_error(fmt::format("HostConfigfile do not match Hostfile: '{}' daemons  compared to '{}' daemons", hostconfigfile_hosts, hostfile_hosts));
-    }
-    return {hcfile,fspriority};
+    LOG(INFO, "Hosts config pool size: {}", hostconfig.size());
 }
 
 vector<pair<string, string>>
@@ -561,15 +548,15 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
         LOG(WARNING, "Failed to find local host. Using host '0' as local host");
         CTX->local_host_id(0);
     }
-    int id = CTX->local_host_id();
-    CTX->local_fs_id(0);
+    unsigned int max_fs_size = 0, max_fs_id = 0;
     for(unsigned int fs = 0;fs < CTX->hostsconfig().size(); fs++){
-        id -= CTX->hostsconfig()[fs];
-        if(id < 0) {
-            CTX->local_fs_id(fs);
-            break;
+        auto size = CTX->hostsconfig()[fs].size;
+        if(size > max_fs_size){
+            max_fs_id = fs;
+            max_fs_size = size;
         }
     }
+    CTX->local_fs_id(max_fs_id);
     CTX->hosts(addrs);
     CTX->hosts_name(hosts_name);
 }

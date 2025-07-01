@@ -389,8 +389,10 @@ struct registry_request {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const std::string& merge_flows, const std::string& merge_hcfile, const std::string& merge_hfile)
-            : m_merge_flows(merge_flows), m_merge_hcfile(merge_hcfile), m_merge_hfile(merge_hfile){}
+        input(const std::string& merge_flows, const std::string& merge_hcfile, 
+            const std::string& merge_hfile, const std::string& flow)
+            : m_merge_flows(merge_flows), m_merge_hcfile(merge_hcfile), 
+            m_merge_hfile(merge_hfile), m_flow(flow) {}
 
         input(input&& rhs) = default;
 
@@ -403,11 +405,13 @@ struct registry_request {
         operator=(const input& other) = default;
 
         explicit input(const rpc_registry_request_in_t& other)
-            : m_merge_flows(other.merge_flows), m_merge_hcfile(other.merge_hcfile), m_merge_hfile(other.merge_hfile){}
+            : m_merge_flows(other.merge_flows), m_merge_hcfile(other.merge_hcfile), 
+            m_merge_hfile(other.merge_hfile), m_flow(other.flow) {}
 
 
         explicit operator rpc_registry_request_in_t() {
-            return { m_merge_flows.c_str(),m_merge_hcfile.c_str(),m_merge_hfile.c_str()};
+            return { m_merge_flows.c_str(), m_merge_hcfile.c_str(),
+                    m_merge_hfile.c_str(), m_flow.c_str()};
         }
 
         std::string
@@ -416,19 +420,25 @@ struct registry_request {
         }
 
         std::string
-        mountdir() const {
+        merge_hcfile() const {
             return m_merge_hcfile;
         }
 
         std::string
-        rootdir() const {
+        merge_hfile() const {
             return m_merge_hfile;
+        }
+
+        std::string
+        flow() const {
+            return m_flow;
         }
 
     private:
         std::string m_merge_flows;
         std::string m_merge_hcfile;
         std::string m_merge_hfile;
+        std::string m_flow;
     };
 
     class output {

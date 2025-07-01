@@ -30,4 +30,6 @@ target_sources(
   gkfs_registry
   PUBLIC my-rpc.hpp
   	 env.hpp
+     utils.hpp
+     ../common/registry_merge_tree.hpp
 )

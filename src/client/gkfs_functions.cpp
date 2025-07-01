@@ -109,7 +109,7 @@ static void add_one_pathfs(std::string path){
     std::vector<unsigned int> fs_list;
     if(CTX->hostsconfig().size() > 1 ){
         if(!CTX->pathfs().count(path)){
-            for(int fs = 0; fs < CTX->hostsconfig().size(); fs++){
+            for(unsigned int fs = 0; fs < CTX->hostsconfig().size(); fs++){
                 auto id = CTX->distributor()->locate_file_metadata_fs(path, 0, fs);
                 if (CTX->bloom_filter_vec().at(id).contains(path)){
                     fs_list.push_back(fs);
