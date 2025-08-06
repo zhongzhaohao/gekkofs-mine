@@ -38,6 +38,7 @@
 #include <map>
 #include <set>
 #include <common/arithmetic/arithmetic.hpp>
+#include <common/fs_info.hpp>
 
 namespace gkfs::rpc {
 
@@ -86,7 +87,7 @@ class SimpleHashDistributor : public Distributor {
 private:
     host_t localhost_;
     host_t localfs_ = 0;
-    std::vector<std::pair<unsigned int, unsigned int>> hosts_size_{};
+    std::vector<fs_info> fs_infos_{};
     std::vector<host_t> all_hosts_;
     std::hash<std::string> str_hash;
     std::map<std::string, unsigned int> * pathfs_{nullptr};
@@ -94,7 +95,7 @@ private:
 public:
     SimpleHashDistributor();
 
-    SimpleHashDistributor(host_t localhost, std::vector<std::pair<unsigned int, unsigned int>> hosts_size, 
+    SimpleHashDistributor(host_t localhost, std::vector<fs_info> fs_infos, 
                         std::map<std::string, unsigned int> * pathfs, host_t localfs);
 
     unsigned int

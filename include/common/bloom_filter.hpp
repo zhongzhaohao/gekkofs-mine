@@ -30,6 +30,12 @@
 #include <sstream>
 #include <cstring>
 
+#ifndef FALLTHROUGH_INTENDED
+#define FALLTHROUGH_INTENDED \
+  do {                       \
+  } while (0)
+#endif
+
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 
 static const unsigned char bit_mask[bits_per_char] = {
@@ -410,17 +416,58 @@ public:
       std::fill(bit_table_.begin(), bit_table_.end(), static_cast<unsigned char>(0x00));
       inserted_element_count_ = 0;
    }
+   inline uint32_t DecodeFixed32(const unsigned char * ptr) const {
+	const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
+
+	// Recent clang and gcc optimize this to a single mov / ldr instruction.
+	return (static_cast<uint32_t>(buffer[0])) |
+			(static_cast<uint32_t>(buffer[1]) << 8) |
+			(static_cast<uint32_t>(buffer[2]) << 16) |
+			(static_cast<uint32_t>(buffer[3]) << 24);
+	}
+
+	uint32_t Hash(const unsigned char* data, size_t n, uint32_t seed) const {
+	// Similar to murmur hash
+	const uint32_t m = 0xc6a4a793;
+	const uint32_t r = 24;
+	const unsigned char* limit = data + n;
+	uint32_t h = seed ^ (n * m);
+
+	// Pick up four bytes at a time
+	while (limit - data >= 4) {
+		uint32_t w = DecodeFixed32(data);
+		data += 4;
+		h += w;
+		h *= m;
+		h ^= (h >> 16);
+	}
+
+	// Pick up remaining bytes
+	switch (limit - data) {
+		case 3:
+		h += static_cast<uint8_t>(data[2]) << 16;
+		FALLTHROUGH_INTENDED;
+		case 2:
+		h += static_cast<uint8_t>(data[1]) << 8;
+		FALLTHROUGH_INTENDED;
+		case 1:
+		h += static_cast<uint8_t>(data[0]);
+		h *= m;
+		h ^= (h >> r);
+		break;
+	}
+	return h;
+	}
 
    inline void insert(const unsigned char* key_begin, const std::size_t& length)
    {
-      std::size_t bit_index = 0;
-      std::size_t bit       = 0;
-
-      for (std::size_t i = 0; i < salt_.size(); ++i)
-      {
-         compute_indices(hash_ap(key_begin, length, salt_[i]), bit_index, bit);
-
-         bit_table_[bit_index / bits_per_char] |= bit_mask[bit];
+	  uint32_t bits = bit_table_.size() * 8;
+	  uint32_t h = Hash(key_begin, length, 0xbc9f1d34);
+      const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+      for (size_t j = 0; j < salt_.size(); j++) {
+        const uint32_t bitpos = h % bits;
+        bit_table_[bitpos / 8] |= (1 << (bitpos % 8));
+        h += delta;
       }
 
       ++inserted_element_count_;
@@ -456,20 +503,16 @@ public:
 
    inline virtual bool contains(const unsigned char* key_begin, const std::size_t length) const
    {
-      std::size_t bit_index = 0;
-      std::size_t bit       = 0;
+		uint32_t bits = bit_table_.size() * 8;
+		uint32_t h = Hash(key_begin, length, 0xbc9f1d34);
+		const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+		for (size_t j = 0; j < salt_.size(); j++) {
+			const uint32_t bitpos = h % bits;
+			if ((bit_table_[bitpos / 8] & (1 << (bitpos % 8))) == 0) return false;
+			h += delta;
+		}
 
-      for (std::size_t i = 0; i < salt_.size(); ++i)
-      {
-         compute_indices(hash_ap(key_begin, length, salt_[i]), bit_index, bit);
-
-         if ((bit_table_[bit_index / bits_per_char] & bit_mask[bit]) != bit_mask[bit])
-         {
-            return false;
-         }
-      }
-
-      return true;
+		return true;
    }
 
    template <typename T>
@@ -874,16 +917,3 @@ private:
 };
 
 #endif
-
-
-/*
-  Note 1:
-  If it can be guaranteed that bits_per_char will be of the form 2^n then
-  the following optimization can be used:
-
-  bit_table_[bit_index >> n] |= bit_mask[bit_index & (bits_per_char - 1)];
-
-  Note 2:
-  For performance reasons where possible when allocating memory it should
-  be aligned (aligned_alloc) according to the architecture being used.
-*/

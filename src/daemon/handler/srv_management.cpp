@@ -37,6 +37,7 @@
 #include <daemon/handler/rpc_defs.hpp>
 
 #include <common/rpc/rpc_types.hpp>
+#include <common/rpc/rpc_util.hpp>
 #include <iostream>
 #include <fstream>
 extern "C" {

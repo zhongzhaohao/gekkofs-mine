@@ -52,8 +52,6 @@ namespace cfg = gkfs::config::rpc;
 */
 struct forward_stat_fs_args{
     int fsId;
-    int hostsize_single;
-    int prefix_num;
     int result;
     int copy;
     string err;
@@ -105,11 +103,9 @@ forward_getSuccessResponseThread(void* data){
     struct forward_stat_fs_args *statfs_args;
     statfs_args = (struct forward_stat_fs_args *) data;
 
-    int prefix_num = statfs_args->prefix_num;
-    int hostsize_single = statfs_args->hostsize_single;
     int copy = statfs_args->copy;
     
-    int hostid = prefix_num + (CTX->distributor()->locate(statfs_args->path, hostsize_single, copy));
+    int hostid = CTX->distributor()->locate_file_metadata_fs(statfs_args->path, copy, statfs_args->fsId);
     auto endp = CTX->hosts().at(hostid);
   
     try {
@@ -126,6 +122,12 @@ forward_getSuccessResponseThread(void* data){
             statfs_args->err = EBUSY;
         }
 
+}
+
+static inline std::string wrapper(std::string prefix, std::string path){
+    if(path == "/") return "/";
+    std::string wrapper_path = "/" + prefix + path;
+    return wrapper_path;
 }
 
 /**
@@ -146,8 +148,10 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         //TODO make sure which fs if multiple fs hash to the same
         if(!CTX->pathfs().count(path)){
             for(unsigned int fs = 0; fs < CTX->hostsconfig().size(); fs++){
-                auto id = CTX->distributor()->locate_file_metadata_fs(path, copy, fs);
-                if (CTX->bloom_filter_vec().at(id).contains(path)){
+                std::string wrapper_path = wrapper(CTX->hostsconfig()[fs].flowname, path);
+                //std::cout<< "fsid "<< fs << " and wrapper " <<wrapper_path << std::endl;
+                auto id = CTX->distributor()->locate_file_metadata_fs(wrapper_path, copy, fs);
+                if (CTX->bloom_filter_vec().at(id).contains(wrapper_path)){
                     fs_list.push_back(fs);
                 }
             }
@@ -157,9 +161,9 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         } else {
             fs_list.push_back(CTX->pathfs()[path]);
         }
-        // for(auto thing: fs_list){
-        //     std::cout<< "stat path: "<< path <<" at fs_list is " << thing << std::endl;
-        // }
+        for(auto thing: fs_list){
+            std::cout<< "stat path: "<< path <<" at fs_list is " << thing << std::endl;
+        }
 
 
         total_fs_num = fs_list.size();
@@ -170,10 +174,10 @@ forward_stat(const std::string& path, string& attr, const int copy) {
 
         for(int i = 0; i < total_fs_num; i++){
             auto fs = fs_list[i];
+            std::string wrappered_path = wrapper(CTX->hostsconfig()[fs].flowname, path);
+            //std::cout<< "fsid "<< fs << " and wrapper " <<wrappered_path << std::endl;
             statfs_args[i].fsId = fs;
-            statfs_args[i].hostsize_single = hostsconfig_array[fs].size;
-            statfs_args[i].prefix_num = hostsconfig_array[fs].prefix;
-            statfs_args[i].path = path;
+            statfs_args[i].path = wrappered_path;
             statfs_args[i].attr = attr;
             statfs_args[i].copy = copy;
 
@@ -209,12 +213,6 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         }
         // data consistency based on fspriority
         for(auto &find : founds) {
-            gkfs::metadata::Metadata md(find.second);
-            // std::cout<< "fs :" << find.first << " meta.ctime: "<<md.ctime() << std::endl; 
-            if(!(hostsconfig_array[find.first].life_start <= md.ctime() &&
-                 hostsconfig_array[find.first].life_end >= md.ctime()) ){
-                continue; //this means metadata is created outside this fs lifetime;
-            }
             auto fsid = CTX->pathfs()[path];
             if(hostsconfig_array[find.first].priority < hostsconfig_array[fsid].priority){
                 CTX->pathfs()[path] = find.first;
@@ -224,9 +222,10 @@ forward_stat(const std::string& path, string& attr, const int copy) {
         // std::cout<< "path: "<< path <<" at pathfs is " << CTX->pathfs()[path] << std::endl;
     /* --Multiple GekkoFS--*/
     } else {
+        std::string wrapper_path = wrapper(CTX->hostsconfig()[CTX->local_fs_id()].flowname, path);
         auto endp = CTX->hosts().at(
-                CTX->distributor()->locate_file_metadata(path, copy));
-
+                CTX->distributor()->locate_file_metadata(wrapper_path, copy));
+                
         try {
             LOG(DEBUG, "Sending RPC ...");
             // TODO(amiranda): add a post() with RPC_TIMEOUT to hermes so that we
@@ -234,11 +233,10 @@ forward_stat(const std::string& path, string& attr, const int copy) {
             // TODO(amiranda): hermes will eventually provide a post(endpoint)
             // returning one result and a broadcast(endpoint_set) returning a
             // result_set. When that happens we can remove the .at(0) :/
-            auto out = ld_network_service->post<gkfs::rpc::stat>(endp, path)
+            auto out = ld_network_service->post<gkfs::rpc::stat>(endp, wrapper_path)
                             .get()
                             .at(0);
             LOG(DEBUG, "Got response success: {}", out.err());
-
             if(out.err())
                 return out.err();
 
@@ -815,13 +813,17 @@ forward_get_dirents(const string& path) {
     auto err = 0;
     // send RPCs
     std::vector<hermes::rpc_handle<gkfs::rpc::get_dirents>> handles;
+    std::string info_flows = path;
+    if(path == "/") 
+        info_flows = CTX->workflow() +";" + CTX->mergeflows();
+    
 
     for(std::size_t i = 0; i < targets.size(); ++i) {
 
         // Setup rpc input parameters for each host
         auto endp = CTX->hosts().at(targets[i]);
-
-        gkfs::rpc::get_dirents::input in(path, exposed_buffers[i]);
+        
+        gkfs::rpc::get_dirents::input in(info_flows, exposed_buffers[i]);
 
         try {
             LOG(DEBUG, "{}() Sending RPC to host: '{}'", __func__, targets[i]);

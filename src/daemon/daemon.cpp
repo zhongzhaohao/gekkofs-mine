@@ -373,7 +373,7 @@ init_environment() {
     // Initialize bloom
     bloom_parameters parameters;
     // How many elements roughly do we expect to insert?
-    parameters.projected_element_count = 100000;
+    parameters.projected_element_count = 5000;
     // Maximum tolerable false positive probability? (0,1)
     parameters.false_positive_probability = 0.0001; // 1 in 10000
     parameters.compute_optimal_parameters();

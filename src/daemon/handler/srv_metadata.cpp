@@ -77,6 +77,7 @@ rpc_srv_create(hg_handle_t handle) {
     try {
         // create metadentry
         gkfs::metadata::create(in.path, md);
+        //std::cout<< "srv create "<< in.path << std::endl;
         out.err = 0;
         std::string path(in.path);
         GKFS_DATA->Bloom_filter().insert(path);
@@ -133,6 +134,7 @@ rpc_srv_stat(hg_handle_t handle) {
     try {
         // get the metadata
         val = gkfs::metadata::get_str(in.path);
+        //std::cout<< "srv stat " << in.path<< std::endl; 
         out.db_val = val.c_str();
         out.err = 0;
         GKFS_DATA->spdlogger()->debug("{}() Sending output mode '{}'", __func__,
@@ -546,8 +548,22 @@ rpc_srv_get_dirents(hg_handle_t handle) {
 
     // Get directory entries from local DB
     vector<pair<string, bool>> entries{};
+    vector<pair<string, bool>> ent_perflow{};
     try {
-        entries = gkfs::metadata::get_dirents(in.path);
+        std::vector<std::string> result;
+        if (in.path[0] != '/') {
+            std::stringstream ss(in.path);
+            std::string flow;
+            while (std::getline(ss, flow, ';')) {
+                std::string tofind = "/" + flow + "/";
+                //std::cout << " to find "<< tofind << std::endl;
+                ent_perflow = gkfs::metadata::get_dirents(tofind);
+                entries.insert(entries.end(), ent_perflow.begin(), ent_perflow.end());
+            }
+        } else {
+            entries = gkfs::metadata::get_dirents(in.path);
+        }
+        //std::cout<< "srv dir ents " << in.path<< std::endl; 
     } catch(const ::exception& e) {
         GKFS_DATA->spdlogger()->error("{}() Error during get_dirents(): '{}'",
                                       __func__, e.what());
@@ -562,7 +578,9 @@ rpc_srv_get_dirents(hg_handle_t handle) {
         out.err = 0;
         return gkfs::rpc::cleanup_respond(&handle, &in, &out);
     }
-
+    // for(auto & ent : entries){
+    //     //std::cout<< "find " << ent.first<< std::endl;
+    // }
     // Calculate total output size
     // TODO OPTIMIZATION: this can be calculated inside db_get_dirents
     size_t tot_names_size = 0;

@@ -185,10 +185,7 @@ forward_write(const string& path, const void* buf, const off64_t offset,
 
         auto endp = CTX->hosts().at(target);
         /* --Multiple GekkoFS--*/
-        // Client HostID global view -> target
-        // Daemon HostID local  view -> target - prefix
         auto fs_id = CTX->distributor()->locate_fs(path);
-        unsigned int prefix = CTX->hostsconfig()[fs_id].prefix;
         /* --Multiple GekkoFS--*/
         try {
             LOG(DEBUG, "Sending RPC ...");
@@ -199,8 +196,8 @@ forward_write(const string& path, const void* buf, const off64_t offset,
                     // a potential offset
                     block_overrun(offset, gkfs::config::rpc::chunksize),
                     /* --Multiple GekkoFS--*/
-                    target - prefix,
-                    CTX->hostsconfig().at(fs_id).size,
+                    target,
+                    CTX->hostsconfig().at(fs_id).fs_size_seq.size(),
                     /* --Multiple GekkoFS--*/
                     // number of chunks handled by that destination
                     gkfs::rpc::compress_bitset(write_ops_vect[target]),
@@ -441,10 +438,7 @@ forward_read(const string& path, void* buf, const off64_t offset,
 
         auto endp = CTX->hosts().at(target);
         /* --Multiple GekkoFS--*/
-        // Client HostID global view -> target
-        // Daemon HostID local  view -> target - prefix
         auto fs_id = CTX->distributor()->locate_fs(path);
-        unsigned int prefix = CTX->hostsconfig()[fs_id].prefix;
         /* --Multiple GekkoFS--*/
         try {
 
@@ -456,8 +450,8 @@ forward_read(const string& path, void* buf, const off64_t offset,
                     // a potential offset
                     block_overrun(offset, gkfs::config::rpc::chunksize), 
                     /* --Multiple GekkoFS--*/
-                    target - prefix,
-                    CTX->hostsconfig().at(fs_id).size,
+                    target,
+                    CTX->hostsconfig().at(fs_id).fs_size_seq.size(),
                     /* --Multiple GekkoFS--*/
                     gkfs::rpc::compress_bitset(read_bitset_vect[target]),
                     // number of chunks handled by that destination

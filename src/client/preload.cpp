@@ -250,9 +250,9 @@ init_environment() {
                        "Failed to load system config: "s + e.what());
     }
     //debug
-    // for(auto xy: hosts_config){
-    //     std::cout<< " hosts_config is " <<xy.prefix << " "<< xy.size<< std::endl;
-    // }
+    for(auto xy: hosts_config){
+        std::cout<< " hosts_config is " <<xy.serialize()<< std::endl;
+    }
     CTX->hostsconfig(hosts_config);
 
     if(CTX->use_registry()){
@@ -295,12 +295,8 @@ init_environment() {
     auto distributor = std::make_shared<gkfs::rpc::GuidedDistributor>(
             CTX->local_host_id(), CTX->hosts().size());
 #else
-    std::vector<std::pair<unsigned int, unsigned int>> host_size{};
-    for(auto &fs_conf : CTX->hostsconfig()){
-        host_size.push_back({fs_conf.prefix, fs_conf.size});
-    }
     auto distributor = std::make_shared<gkfs::rpc::SimpleHashDistributor>(
-            CTX->local_host_id(), host_size, &(CTX->pathfs()), CTX->local_fs_id());
+            CTX->local_host_id(), CTX->hostsconfig(), &(CTX->pathfs()), CTX->local_fs_id());
 #endif
     CTX->distributor(distributor);
 #endif

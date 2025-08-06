@@ -221,6 +221,26 @@ PreloadContext::thread_pool() {
     return thread_pool_;
 }
 
+std::string
+PreloadContext::workflow() const {
+    return workflow_;
+}
+
+void
+PreloadContext::workflow(std::string workflow){
+    workflow_ = workflow;
+}
+
+std::string
+PreloadContext::mergeflows() const {
+    return mergeflows_;
+}
+
+void
+PreloadContext::mergeflows(std::string mergeflows){
+    mergeflows_ = mergeflows;
+}
+
 /* --Multiple GekkoFS-- */
 
 void

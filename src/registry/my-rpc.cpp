@@ -20,7 +20,6 @@
 #include <registry/utils.hpp>
 
 #include <common/rpc/rpc_types.hpp>
-#include <common/registry_merge_tree.hpp>
 #include <algorithm>
 
 
@@ -54,45 +53,9 @@ rpc_srv_registry_request(hg_handle_t handle)
         while (std::getline(ss, flow, ';')) {
             flow_arr.push_back(flow);
         }
-        
-        //write to file 
-        {
-            std::ofstream clearFile(hfile, std::ios::trunc); 
-        }
-        std::ofstream hf(hfile, std::ios::app);
-        std::set<std::string> rootflows;
-        for (const auto& fl : flow_arr) {
-            auto root_fl = tree_manager.flownameToRoot[fl]->flowname;
-            std::cout<< "root_Fl "<<root_fl << std::endl;
-            if(rootflows.count(root_fl)) continue;
-            rootflows.insert(root_fl);
-            std::string fl_hfile = job_flows[root_fl].hfile;
-            std::cout<<"fl_hfile " << fl_hfile<< std::endl;
-            std::ifstream src(fl_hfile);
-            if (!src.is_open()) {
-                throw std::runtime_error("无法打开源文件: " + fl_hfile);
-            }
-
-            std::string line;
-            while (std::getline(src, line)) {
-                //debug
-                std::cout<< "line is "<<line << std::endl;
-                if (!line.empty() && !std::all_of(line.begin(), line.end(), ::isspace)) {
-                    hf << line << std::endl;
-                }
-            }
-            src.close();
-        }
-        hf.close();
-
-        std::time_t time;
-        std::time(&time);
-        TreeNodePtr mergedRoot = tree_manager.mergeTrees(
-            flow_name, 1, time, flow_arr
+        bool ok = tree_manager.MergeTree(
+            flow_name, hfile, hcfile, flow_arr
         );
-        tree_manager.addTree(mergedRoot);
-        TreeSerializer serializer;
-        serializer.serializeTreeToFile(mergedRoot, hcfile);
         job_flows[flow_name] = {hfile,hcfile,count_file_lines(hfile), fs::last_write_time(hfile)};
         // set read only
         chmod(hfile, S_IRUSR | S_IRGRP | S_IROTH);
@@ -141,8 +104,8 @@ rpc_srv_registry_register(hg_handle_t handle)
         //hfile not modified--same flow as before, do nothing
         //hfile modified--allow change and del whole old tree where flow exists
         //changjing: 融合树的子树register,no worry?
-        // TODO registry掉线重启(suppose never down)
-        // TODO mergefile is previous one，注册工作流(hard to recognize)
+        // TODO registry掉线重启
+        // TODO mergefile 实际未merge，注册工作流
         // TODO Add flow create time: what if registry getdown
         std::cout<< flow<<" " << hcfile <<" "<< hfile <<std::endl;
         unsigned int lines = count_file_lines(hfile);
@@ -156,8 +119,7 @@ rpc_srv_registry_register(hg_handle_t handle)
                     // auto root = tree_manager.flownameToRoot[flow];
                     // tree_manager.flownameToRoot.erase(root.flowname);
                     job_flows[flow] = finfo;
-                    auto flow_node = std::make_shared<TreeNode>(flow, 1, count_file_lines(hfile));
-                    tree_manager.addTree(flow_node);
+                    tree_manager.AddTree(flow, hfile);
                 } else {
                     std::cout<< "no modified. "<< std::endl;
                     ; //do nothing 
@@ -165,14 +127,12 @@ rpc_srv_registry_register(hg_handle_t handle)
             } else {
                 std::cout<< "new file and we flush it"<< std::endl;
                 job_flows[flow] = finfo;
-                auto flow_node = std::make_shared<TreeNode>(flow, 1, count_file_lines(hfile));
-                tree_manager.addTree(flow_node);
+                tree_manager.AddTree(flow, hfile);
             }
         } else {
             std::cout<< "no such flow "<< std::endl;
             job_flows[flow] = finfo;
-            auto flow_node = std::make_shared<TreeNode>(flow, 1, count_file_lines(hfile));
-            tree_manager.addTree(flow_node);
+            tree_manager.AddTree(flow, hfile);
         }
 
     } catch(const std::exception& e) {

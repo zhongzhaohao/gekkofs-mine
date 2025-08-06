@@ -36,7 +36,6 @@
 #include <common/rpc/rpc_util.hpp>
 #include <common/env_util.hpp>
 #include <common/common_defs.hpp>
-#include <common/registry_merge_tree.hpp>
 
 #include <hermes.hpp>
 
@@ -380,6 +379,10 @@ void read_env(string &workflow,string &hostfile,string &hostconfigfile){
                                   gkfs::config::hostfile_config_path);
     workflow = gkfs::env::get_var(gkfs::env::WORK_FLOW,
                                   "default_job");//todo default name of work flow
+    auto mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
+                            "");
+    CTX->workflow(workflow);
+    CTX->mergeflows(mergeflows);
 }
 
 /**
@@ -456,20 +459,29 @@ void
 read_hosts_config_file(std::vector<fs_info>& hostconfig, 
                        unsigned int all_hosts) {
     if(!CTX->use_registry()){
-        fs_info fs_conf = {0, all_hosts, 1, TimeMin, TimeMax};
+        std::vector<uint32_t> lines(all_hosts);
+        std::iota(lines.begin(), lines.end(), 0);
+        fs_info fs_conf = {"default_job", lines, 0};
         hostconfig.push_back(fs_conf);
         return ;
     }
     string hostconfigfile;
     hostconfigfile = gkfs::env::get_var(gkfs::env::HOSTS_CONFIG_FILE,
                                   gkfs::config::hostfile_config_path);
-
-    TreeSerializer serializer;
-    auto root = serializer.deserializeTreeFromFile(hostconfigfile);
-    root->generatePositionVectors(hostconfig, 0);
+    
+    ifstream hcfile(hostconfigfile);
+    std::string line;
+    while(getline(hcfile, line)){
+        fs_info fs_conf;
+        bool ok = fs_info::deserialize(line, fs_conf);
+        if(ok)
+            hostconfig.push_back(fs_conf);
+    }
 
     if(hostconfig.empty()) {
-        fs_info fs_conf = {0, all_hosts, 1, TimeMin, TimeMax};
+        std::vector<uint32_t> lines(all_hosts);
+        std::iota(lines.begin(), lines.end(), 0);
+        fs_info fs_conf = {CTX->workflow(), lines, 0};
         hostconfig.push_back(fs_conf);
     }
 
@@ -548,15 +560,15 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
         LOG(WARNING, "Failed to find local host. Using host '0' as local host");
         CTX->local_host_id(0);
     }
-    unsigned int max_fs_size = 0, max_fs_id = 0;
-    for(unsigned int fs = 0;fs < CTX->hostsconfig().size(); fs++){
-        auto size = CTX->hostsconfig()[fs].size;
-        if(size > max_fs_size){
-            max_fs_id = fs;
-            max_fs_size = size;
-        }
-    }
-    CTX->local_fs_id(max_fs_id);
+    // unsigned int max_fs_size = 0, max_fs_id = 0;
+    // for(unsigned int fs = 0;fs < CTX->hostsconfig().size(); fs++){
+    //     auto size = CTX->hostsconfig()[fs].fs_size_seq.size();
+    //     if(size > max_fs_size){
+    //         max_fs_id = fs;
+    //         max_fs_size = size;
+    //     }
+    // }
+    CTX->local_fs_id(0);
     CTX->hosts(addrs);
     CTX->hosts_name(hosts_name);
 }

@@ -103,6 +103,8 @@ private:
     uint64_t local_fs_id_; // Id of GekkoFS having local host(daemon)
     std::vector<bloom_filter> bloom_filter_vec_;  //bloom filter
     ThreadPool thread_pool_; // thread pool
+    std::string workflow_;
+    std::string mergeflows_;
     /* --Multiple GekkoFS-- */
 
     std::vector<hermes::endpoint> hosts_;
@@ -200,6 +202,20 @@ public:
 
     ThreadPool& 
     thread_pool();
+
+    std::string
+    workflow() const;
+
+    void
+    workflow(std::string workflow);
+
+
+    std::string
+    mergeflows() const;
+
+    void
+    mergeflows(std::string mergeflows);
+
     /* --Multiple GekkoFS-- */
 
     void
