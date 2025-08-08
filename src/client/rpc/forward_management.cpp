@@ -129,9 +129,10 @@ forward_get_bloom_filter(size_t size) {
     std::mt19937 g(rd());  // seed the random generator
     std::shuffle(host_ids.begin(), host_ids.end(), g); // Shuffle hosts vector
     std::vector<hermes::rpc_handle<gkfs::rpc::Bloom_filter>> handles;
+    auto endp = CTX->hosts().at(0);
     for (const auto& id : host_ids) {
         try {
-            auto endp = CTX->hosts().at(id);
+            endp = CTX->hosts().at(id);
             LOG(DEBUG, "Sending bloom filter RPC to host: {}", endp.to_string());
             
             gkfs::rpc::Bloom_filter::input in(exposed_buffers[id]);
@@ -149,7 +150,7 @@ forward_get_bloom_filter(size_t size) {
     auto err = 0;
     std::vector<bloom_filter>& filter_vec = CTX->bloom_filter_vec();
     filter_vec.resize(CTX->hosts().size());
-    size_t idx = 0;
+    size_t idx = 0, real_id = 0;
 
     for (const auto& h : handles) {
         try {
@@ -160,7 +161,7 @@ forward_get_bloom_filter(size_t size) {
                 idx ++;
                 continue;
             }
-            auto real_id = host_ids[idx];
+            real_id = host_ids[idx];
             void* base_ptr = exposed_buffers[real_id].begin()->data();
             char* raw_buf = reinterpret_cast<char*>(base_ptr);
             //std::cout << "get bloom with size " << buffer_size << std::endl;
