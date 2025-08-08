@@ -33,6 +33,8 @@
 #include <client/rpc/rpc_types.hpp>
 #include <common/bloom_filter.hpp>
 #include <fstream>
+#include <random>
+#include <algorithm>
 namespace gkfs::rpc {
 
 /**
@@ -105,6 +107,7 @@ forward_get_bloom_filter(size_t size) {
     std::vector<hermes::exposed_memory> exposed_buffers;
     exposed_buffers.reserve(hosts_size);
 
+    
     for(std::size_t i = 0; i < hosts_size; ++i){
         try {
             std::unique_ptr<char[]> buf(new char[buffer_size]);
@@ -120,10 +123,15 @@ forward_get_bloom_filter(size_t size) {
         }
     }
 
-    size_t id = 0;
+    std::vector<uint64_t> host_ids(hosts_size);
+    std::iota(host_ids.begin(), host_ids.end(), 0);
+    std::random_device rd; // obtain a random number from hardware
+    std::mt19937 g(rd());  // seed the random generator
+    std::shuffle(host_ids.begin(), host_ids.end(), g); // Shuffle hosts vector
     std::vector<hermes::rpc_handle<gkfs::rpc::Bloom_filter>> handles;
-    for (const auto& endp : CTX->hosts()) {
+    for (const auto& id : host_ids) {
         try {
+            auto endp = CTX->hosts().at(id);
             LOG(DEBUG, "Sending bloom filter RPC to host: {}", endp.to_string());
             
             gkfs::rpc::Bloom_filter::input in(exposed_buffers[id]);
@@ -135,7 +143,6 @@ forward_get_bloom_filter(size_t size) {
                 endp.to_string(), ex.what());
             return false;
         }
-        id ++;
     }
 
     // get responses
@@ -153,14 +160,15 @@ forward_get_bloom_filter(size_t size) {
                 idx ++;
                 continue;
             }
-            void* base_ptr = exposed_buffers[idx].begin()->data();
+            auto real_id = host_ids[idx];
+            void* base_ptr = exposed_buffers[real_id].begin()->data();
             char* raw_buf = reinterpret_cast<char*>(base_ptr);
             //std::cout << "get bloom with size " << buffer_size << std::endl;
-            filter_vec[idx].deserialize(raw_buf, filter_size);
+            filter_vec[real_id].deserialize(raw_buf, filter_size);
 
         } catch (const std::exception& ex) {
             LOG(ERROR, "Error receiving bloom filter from host {}: {}", 
-                idx, ex.what());
+                real_id, ex.what());
             err = EBUSY;
         }
         idx ++;
