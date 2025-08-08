@@ -64,7 +64,7 @@ using gkfs::utils::arithmetic::last_smaller_equal;
 pair<int, ssize_t>
 forward_write(const string& path, const void* buf, const off64_t offset,
               const size_t write_size, const int8_t num_copies) {
-
+    //std::cout<< "forward_write" << path<< std::endl;
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
 
@@ -318,7 +318,7 @@ pair<int, ssize_t>
 forward_read(const string& path, void* buf, const off64_t offset,
              const size_t read_size, const int8_t num_copies,
              std::set<int8_t>& failed) {
-
+    //std::cout<< "forward_read" << path<< std::endl;
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
 
@@ -546,7 +546,7 @@ forward_read(const string& path, void* buf, const off64_t offset,
 int
 forward_truncate(const std::string& path, size_t current_size, size_t new_size,
                  const int8_t num_copies) {
-
+    //std::cout<< "forward_truncate"<<path<< std::endl;
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
 
@@ -572,7 +572,7 @@ forward_truncate(const std::string& path, size_t current_size, size_t new_size,
     auto err = 0;
 
     for(const auto& host : hosts) {
-
+        //std::cout<< " host is " << host<< std::endl;
         auto endp = CTX->hosts().at(host);
 
         try {
@@ -599,7 +599,7 @@ forward_truncate(const std::string& path, size_t current_size, size_t new_size,
                    // here
         }
     }
-
+    //std::cout<< std::endl;
     // Wait for RPC responses and then get response
     for(const auto& h : handles) {
         try {

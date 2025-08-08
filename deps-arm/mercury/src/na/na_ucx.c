@@ -1003,7 +1003,7 @@ na_ucp_context_create(const ucp_config_t *config, na_bool_t no_wait,
     // Added to enable glex support, seems mercury is overwrite the env variables for UCX.
     ucp_config_modify(config, "NET_DEVICES", "gn0,gni0");
     ucp_config_modify(config, "TLS", "tcp,glex");
-    ucp_config_print(config, stdout, NULL, UCS_CONFIG_PRINT_CONFIG);
+    //ucp_config_print(config, stdout, NULL, UCS_CONFIG_PRINT_CONFIG);
 
 
     /* Create UCP context */

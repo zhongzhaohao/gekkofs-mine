@@ -35,6 +35,7 @@
  */
 #include <daemon/daemon.hpp>
 #include <daemon/handler/rpc_defs.hpp>
+#include <daemon/handler/rpc_util.hpp>
 
 #include <common/rpc/rpc_types.hpp>
 #include <common/rpc/rpc_util.hpp>
@@ -42,6 +43,7 @@
 #include <fstream>
 extern "C" {
 #include <unistd.h>
+
 }
 
 using namespace std;
@@ -88,27 +90,55 @@ rpc_srv_get_fs_config(hg_handle_t handle) {
     return HG_SUCCESS;
 }
 
-hg_return_t
+hg_return_t 
 rpc_srv_get_bloom_filter(hg_handle_t handle) {
+    rpc_bloom_filter_in_t in{};
     rpc_bloom_filter_out_t out{};
+    hg_bulk_t bulk_handle = nullptr;
+    out.err = 0;
 
-    GKFS_DATA->spdlogger()->debug("{}() Got config RPC", __func__);
-
-    std::string bloom_filter_str = GKFS_DATA->Bloom_filter().serialize();
-    out.bloom_filter_str = bloom_filter_str.c_str();
-
-    GKFS_DATA->spdlogger()->debug("{}() Sending output configs back to library",
-                                  __func__);
-    auto hret = margo_respond(handle, &out);
-    if(hret != HG_SUCCESS) {
+    // 获取输入参数
+    auto ret = margo_get_input(handle, &in);
+    if (ret != HG_SUCCESS) {
         GKFS_DATA->spdlogger()->error(
-                "{}() Failed to respond to client to bloom filters",
-                __func__);
+            "{}() Could not get RPC input: {}", __func__, ret);
+        out.err = EIO;
+        return gkfs::rpc::cleanup_respond(&handle, &in, &out, &bulk_handle);
     }
 
-    // Destroy handle when finished
+    const auto& bloom_filter_str = GKFS_DATA->Bloom_filter().serialize();
+    size_t filter_size = bloom_filter_str.size();
+    void* filter_data = const_cast<char*>(bloom_filter_str.c_str());
+    //std::cout<< "forward_bloom with size" << filter_size<<std::endl;
+    auto hgi = margo_get_info(handle);
+    auto mid = margo_hg_info_get_instance(hgi);
+
+    try {
+        ret = margo_bulk_create(mid, 1, &filter_data, &filter_size, 
+                               HG_BULK_READ_ONLY, &bulk_handle);
+        if (ret != HG_SUCCESS) {
+            throw std::runtime_error("Failed to create bulk handle");
+        }
+
+        ret = margo_bulk_transfer(mid, HG_BULK_PUSH, hgi->addr, 
+                                 in.bulk_handle, 0, bulk_handle, 0, filter_size);
+        if (ret != HG_SUCCESS) {
+            throw std::runtime_error("Bulk transfer failed");
+        }
+
+        GKFS_DATA->spdlogger()->debug(
+            "{}() Sent bloom filter (size: {}) via bulk transfer",
+            __func__, filter_size);
+
+    } catch (const std::exception& ex) {
+        GKFS_DATA->spdlogger()->error(
+            "{}() Error during bulk transfer: {}", __func__, ex.what());
+        out.err = EIO;
+    }
+
+    auto handler_ret = gkfs::rpc::cleanup_respond(&handle, &in, &out, &bulk_handle);
     margo_destroy(handle);
-    return HG_SUCCESS;
+    return handler_ret;
 }
 
 } // namespace

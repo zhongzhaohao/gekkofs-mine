@@ -196,6 +196,11 @@ PreloadContext::pathfs() {
     return pathfs_;
 }
 
+std::map<std::string, unsigned int>&
+PreloadContext::wrapper_pathfs() {
+    return wrapper_pathfs_;
+}
+
 uint64_t
 PreloadContext::local_fs_id() const {
     return local_fs_id_;

@@ -100,6 +100,7 @@ private:
     bool use_registry_; // Use or not
     std::vector<fs_info> hostsconfig_; // Host(Daemon) config of Each GekkoFS
     std::map<std::string, unsigned int> pathfs_; // Cache of GekkoFS id where path exists
+    std::map<std::string, unsigned int> wrapper_pathfs_; // Cache of GekkoFS id where wrapper path exists
     uint64_t local_fs_id_; // Id of GekkoFS having local host(daemon)
     std::vector<bloom_filter> bloom_filter_vec_;  //bloom filter
     ThreadPool thread_pool_; // thread pool
@@ -187,6 +188,9 @@ public:
 
     std::map<std::string, unsigned int>&
     pathfs() ; 
+
+    std::map<std::string, unsigned int>&
+    wrapper_pathfs() ; 
 
     uint64_t
     local_fs_id() const;

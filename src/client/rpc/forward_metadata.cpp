@@ -68,7 +68,7 @@ struct forward_stat_fs_args{
  */
 int
 forward_create(const std::string& path, const mode_t mode, const int copy) {
-
+    //std::cout<< "forward_create" << path<< std::endl;
     auto id = CTX->distributor()->locate_file_metadata(path, copy);
     auto endp = CTX->hosts().at(id);
 
@@ -125,6 +125,7 @@ forward_getSuccessResponseThread(void* data){
 }
 
 static inline std::string wrapper(std::string prefix, std::string path){
+    if(!CTX->use_registry()) return path;
     if(path == "/") return "/";
     std::string wrapper_path = "/" + prefix + path;
     return wrapper_path;
@@ -132,18 +133,20 @@ static inline std::string wrapper(std::string prefix, std::string path){
 
 /**
  * Send an RPC for a stat request
- * @param path
+ * @param path not a wrappered path
  * @param attr
  * @param copy metadata replica to read from
  * @return error code
  */
 int
 forward_stat(const std::string& path, string& attr, const int copy) {
+    //std::cout<< "forward_stat" << path<< std::endl;
     /* --Multiple GekkoFS--*/
     auto hostsconfig_array = CTX->hostsconfig(); //Vector: config of all Single GekkoFS
     int total_fs_num = hostsconfig_array.size(); // Number of all Single GekkoFS
     LOG(DEBUG, "{}(), path: {}", __func__, path);
     if(total_fs_num > 1){ 
+        //std::cout<< "stat start "<< std::endl;
         std::vector<unsigned int> fs_list;
         //TODO make sure which fs if multiple fs hash to the same
         if(!CTX->pathfs().count(path)){
@@ -157,13 +160,13 @@ forward_stat(const std::string& path, string& attr, const int copy) {
             }
             if (fs_list.size() == 0){
                 fs_list.push_back(CTX->local_fs_id());
-             }
+            }
         } else {
             fs_list.push_back(CTX->pathfs()[path]);
         }
-        for(auto thing: fs_list){
-            std::cout<< "stat path: "<< path <<" at fs_list is " << thing << std::endl;
-        }
+        // for(auto thing: fs_list){
+        //     std::cout<< "stat path: "<< path <<" at fs_list is " << thing << std::endl;
+        // }
 
 
         total_fs_num = fs_list.size();
@@ -219,7 +222,13 @@ forward_stat(const std::string& path, string& attr, const int copy) {
                 attr = find.second;
             }
         }
+        if(!CTX->pathfs().count(path)){
+            std::string wrappered_path = wrapper(CTX->hostsconfig()[CTX->pathfs()[path]].flowname, path);
+            CTX->wrapper_pathfs()[wrappered_path] = CTX->pathfs()[path];
+        }
         // std::cout<< "path: "<< path <<" at pathfs is " << CTX->pathfs()[path] << std::endl;
+        //if(path == "/") std::cout<< " meta "<< attr << std::endl;
+        //std::cout<< "stat end"<< std::endl;
     /* --Multiple GekkoFS--*/
     } else {
         std::string wrapper_path = wrapper(CTX->hostsconfig()[CTX->local_fs_id()].flowname, path);
@@ -265,6 +274,7 @@ forward_stat(const std::string& path, string& attr, const int copy) {
  */
 int
 forward_remove(const std::string& path, const int8_t num_copies) {
+    //std::cout<< "forward_rev" << path<< std::endl;
     int64_t size = 0;
     uint32_t mode = 0;
 
@@ -443,7 +453,7 @@ forward_remove(const std::string& path, const int8_t num_copies) {
  */
 int
 forward_decr_size(const std::string& path, size_t length, const int copy) {
-
+    //std::cout<< "forward_decr" << path<< std::endl;
     auto endp = CTX->hosts().at(
             CTX->distributor()->locate_file_metadata(path, copy));
 
@@ -483,7 +493,7 @@ forward_update_metadentry(const string& path,
                           const gkfs::metadata::Metadata& md,
                           const gkfs::metadata::MetadentryUpdateFlags& md_flags,
                           const int copy) {
-
+    //std::cout<< "forward_upd_meta" << path<< std::endl;                    
     auto endp = CTX->hosts().at(
             CTX->distributor()->locate_file_metadata(path, copy));
 
@@ -675,7 +685,7 @@ pair<int, off64_t>
 forward_update_metadentry_size(const string& path, const size_t size,
                                const off64_t offset, const bool append_flag,
                                const int num_copies) {
-
+        //std::cout<< "forward_upd_meta_size" << path<< std::endl;                            
     std::vector<hermes::rpc_handle<gkfs::rpc::update_metadentry_size>> handles;
 
     for(auto copy = 0; copy < num_copies + 1; copy++) {
@@ -739,7 +749,7 @@ forward_update_metadentry_size(const string& path, const size_t size,
  */
 pair<int, off64_t>
 forward_get_metadentry_size(const std::string& path, const int copy) {
-
+        //std::cout<< "forward_get meta size" << path<< std::endl;
     auto endp = CTX->hosts().at(
             CTX->distributor()->locate_file_metadata(path, copy));
 
@@ -774,7 +784,7 @@ forward_get_metadentry_size(const std::string& path, const int copy) {
  */
 pair<int, shared_ptr<gkfs::filemap::OpenDir>>
 forward_get_dirents(const string& path) {
-
+        //std::cout<< "forward_get_dents" << path<< std::endl;
     LOG(DEBUG, "{}() enter for path '{}'", __func__, path)
 
     auto const targets = CTX->distributor()->locate_directory_metadata(path);
@@ -814,7 +824,7 @@ forward_get_dirents(const string& path) {
     // send RPCs
     std::vector<hermes::rpc_handle<gkfs::rpc::get_dirents>> handles;
     std::string info_flows = path;
-    if(path == "/") 
+    if(path == "/" && CTX->use_registry()) 
         info_flows = CTX->workflow() +";" + CTX->mergeflows();
     
 
@@ -906,6 +916,7 @@ forward_get_dirents(const string& path) {
             // number of characters in entry + \0 terminator
             names_ptr += name.size() + 1;
             if(path == "/"){ //only for / to avoid repetition
+                //std::cout<< "forward_get_dirents get "<< name<<std::endl;
                 if(dir_record.count({name,ftype})) continue;
                 dir_record.insert({name,ftype});
             }

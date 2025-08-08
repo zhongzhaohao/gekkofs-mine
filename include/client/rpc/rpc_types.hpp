@@ -250,7 +250,7 @@ struct Bloom_filter {
     using handle_type = hermes::rpc_handle<self_type>;
     using input_type = input;
     using output_type = output;
-    using mercury_input_type = hermes::detail::hg_void_t;
+    using mercury_input_type = rpc_bloom_filter_in_t; ;
     using mercury_output_type = rpc_bloom_filter_out_t;
 
     // RPC public identifier
@@ -269,36 +269,41 @@ struct Bloom_filter {
 
     // Mercury callback to serialize input arguments
     constexpr static const auto mercury_in_proc_cb =
-            hermes::detail::hg_proc_void_t;
+            HG_GEN_PROC_NAME(rpc_bloom_filter_in_t); 
 
     // Mercury callback to serialize output arguments
     constexpr static const auto mercury_out_proc_cb =
             HG_GEN_PROC_NAME(rpc_bloom_filter_out_t);
 
-    class input {
+     class input {
 
         template <typename ExecutionContext>
         friend hg_return_t
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input() {}
+        input(const hermes::exposed_memory& buffers)
+            : m_buffers(buffers) {}
 
         input(input&& rhs) = default;
-
         input(const input& other) = default;
+        input& operator=(input&& rhs) = default;
+        input& operator=(const input& other) = default;
 
-        input&
-        operator=(input&& rhs) = default;
+        explicit input(const rpc_bloom_filter_in_t& other)
+            :m_buffers(other.bulk_handle) {}
 
-        input&
-        operator=(const input& other) = default;
-
-        explicit input(const hermes::detail::hg_void_t& other) {}
-
-        explicit operator hermes::detail::hg_void_t() {
-            return {};
+        explicit operator rpc_bloom_filter_in_t() {
+            return {hg_bulk_t(m_buffers)};
         }
+
+        hermes::exposed_memory
+        buffers() const {
+            return m_buffers;
+        }
+
+    private:
+        hermes::exposed_memory m_buffers;
     };
 
     class output {
@@ -308,40 +313,36 @@ struct Bloom_filter {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        output()
-            : m_bloom_filter_str(), m_err(){}
+        output() : m_err(0), m_io_size(0) {}
 
-        output(const std::string bloom_filter_str, int32_t err)
-            : m_bloom_filter_str(bloom_filter_str), m_err(err) {}
+        output(int32_t err, size_t io_size)
+            : m_err(err), m_io_size(io_size) {}
 
         output(output&& rhs) = default;
-
         output(const output& other) = default;
-
-        output&
-        operator=(output&& rhs) = default;
-
-        output&
-        operator=(const output& other) = default;
+        output& operator=(output&& rhs) = default;
+        output& operator=(const output& other) = default;
 
         explicit output(const rpc_bloom_filter_out_t& out) {
-            m_bloom_filter_str = out.bloom_filter_str;
             m_err = out.err;
+            m_io_size = out.io_size;
         }
 
-        int32_t
-        err() const {
+        explicit operator rpc_bloom_filter_out_t() {
+            return {m_err, m_io_size};
+        }
+
+        int32_t err() const {
             return m_err;
         }
 
-        std::string
-        bloom_filter_str() const{
-            return m_bloom_filter_str;
+        size_t io_size() const {
+            return m_io_size;
         }
 
     private:
-        std::string m_bloom_filter_str;
         int32_t m_err;
+        size_t m_io_size;
     };
 };
 

@@ -557,7 +557,7 @@ rpc_srv_get_dirents(hg_handle_t handle) {
             while (std::getline(ss, flow, ';')) {
                 std::string tofind = "/" + flow + "/";
                 //std::cout << " to find "<< tofind << std::endl;
-                ent_perflow = gkfs::metadata::get_dirents(tofind);
+                auto ent_perflow = gkfs::metadata::get_dirents(tofind);
                 entries.insert(entries.end(), ent_perflow.begin(), ent_perflow.end());
             }
         } else {
@@ -579,7 +579,7 @@ rpc_srv_get_dirents(hg_handle_t handle) {
         return gkfs::rpc::cleanup_respond(&handle, &in, &out);
     }
     // for(auto & ent : entries){
-    //     //std::cout<< "find " << ent.first<< std::endl;
+    //     std::cout<< "find " << ent.first<< std::endl;
     // }
     // Calculate total output size
     // TODO OPTIMIZATION: this can be calculated inside db_get_dirents

@@ -203,9 +203,9 @@ public:
       return base64_encode(binary_data.data(), binary_data.size());
    }
 
-   void deserialize(const std::string& str) {
+   void deserialize(const char* str, size_t size) {
       
-      std::vector<unsigned char> binary_data = base64_decode(str);
+      std::vector<unsigned char> binary_data = base64_decode(str, size);
       const unsigned char* ptr = binary_data.data();
       const unsigned char* end = ptr + binary_data.size();
 
@@ -293,9 +293,8 @@ public:
       return ret;
    }
 
-   static std::vector<unsigned char> base64_decode(const std::string& encoded) {
+   static std::vector<unsigned char> base64_decode(const char* encoded, size_t length) {
       std::vector<unsigned char> ret;
-      size_t in_len = encoded.size();
       int i = 0;
       uint8_t byte4[4];
 
@@ -304,24 +303,30 @@ public:
          return pos ? pos - base64_chars : 0;
       };
 
-      while (in_len-- && encoded[i] != '=') {
-         byte4[i%4] = get_char_value(encoded[i]);
-         if (++i%4 == 0) {
-            ret.push_back((byte4[0] << 2) | ((byte4[1] & 0x30) >> 4));
-            ret.push_back(((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2));
-            ret.push_back(((byte4[2] & 0x3) << 6) | byte4[3]);
+      while (length-- && encoded[i] != '=') {
+         byte4[i % 4] = get_char_value(encoded[i]);
+         if (++i % 4 == 0) {
+               ret.push_back((byte4[0] << 2) | ((byte4[1] & 0x30) >> 4));
+               ret.push_back(((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2));
+               ret.push_back(((byte4[2] & 0x3) << 6) | byte4[3]);
          }
       }
-      if (i%4) {
-         uint8_t temp[3] = {0};
-         for(int j = 0; j < i%4; j++)
-            byte4[j] = get_char_value(encoded[i - (i%4) + j]);
 
+      if (i % 4) {
+         uint8_t temp[3] = {0};
+         int remaining = i % 4;
+         for (int j = 0; j < remaining; j++) {
+               if (i - (i % 4) + j < static_cast<int>(length + i)) {
+                  byte4[j] = get_char_value(encoded[i - (i % 4) + j]);
+               } else {
+                  byte4[j] = 0;
+               }
+         }
          temp[0] = (byte4[0] << 2) | ((byte4[1] & 0x30) >> 4);
          temp[1] = ((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2);
-
-         for (int j = 0; j < i%4 - 1; j++)
-            ret.push_back(temp[j]);
+         for (int j = 0; j < remaining - 1; j++) {
+               ret.push_back(temp[j]);
+         }
       }
 
       return ret;

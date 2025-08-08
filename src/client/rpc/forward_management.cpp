@@ -91,47 +91,82 @@ forward_get_fs_config() {
  * Gets bloom filter from all daemons
  * @return
  */
-bool
-forward_get_bloom_filter() {
+bool 
+forward_get_bloom_filter(size_t size) {
 
-    std::vector<hermes::rpc_handle<gkfs::rpc::Bloom_filter>> handles;
-    gkfs::rpc::Bloom_filter::output out;
-    for(const auto& endp : CTX->hosts()) {
-    try {
-        LOG(DEBUG, "Sending RPC to host: {}", endp.to_string());
-        handles.emplace_back(
-                ld_network_service->post<gkfs::rpc::Bloom_filter>(endp));
+    size_t filter_size = size;
+    size_t buffer_size = size + 10;
+    size_t hosts_size = CTX->hosts().size();
+    
+    //prepare buffers for bloom filter
+    std::vector<std::unique_ptr<char[]>> bufs;
+    bufs.reserve(CTX->hosts().size());
 
-    } catch(const std::exception& ex) {
-        LOG(ERROR,
-            "Failed to forward non-blocking rpc request to host: {}",
-            endp.to_string());
-        return EBUSY;
-    }
-    }
+    std::vector<hermes::exposed_memory> exposed_buffers;
+    exposed_buffers.reserve(hosts_size);
 
-    // wait for RPC responses
-    auto err = 0;
-    std::vector<bloom_filter> &filter_vec = CTX->bloom_filter_vec();
-    filter_vec.resize(CTX->hosts().size());
-    auto idx = 0;
-    for(const auto& h : handles) {
+    for(std::size_t i = 0; i < hosts_size; ++i){
         try {
-            out = h.get().at(0);
-
-            if(out.err() != 0) {
-                LOG(ERROR, "received error response: {}", out.err());
-                err = out.err();
-            }
-            filter_vec[idx].deserialize(out.bloom_filter_str());
-            idx ++;
+            std::unique_ptr<char[]> buf(new char[buffer_size]);
+            bufs.push_back(std::move(buf));
+            exposed_buffers.emplace_back(ld_network_service->expose(
+                    std::vector<hermes::mutable_buffer>{hermes::mutable_buffer{
+                            bufs.back().get(), buffer_size}},
+                    hermes::access_mode::write_only));
         } catch(const std::exception& ex) {
-            LOG(ERROR, "while getting rpc output");
-            err = EBUSY;
+            LOG(ERROR, "{}() Failed to expose buffers for RMA. err '{}'",
+                __func__, ex.what());
+            return false;
         }
     }
 
-    return err;
+    size_t id = 0;
+    std::vector<hermes::rpc_handle<gkfs::rpc::Bloom_filter>> handles;
+    for (const auto& endp : CTX->hosts()) {
+        try {
+            LOG(DEBUG, "Sending bloom filter RPC to host: {}", endp.to_string());
+            
+            gkfs::rpc::Bloom_filter::input in(exposed_buffers[id]);
+            handles.emplace_back(
+                ld_network_service->post<gkfs::rpc::Bloom_filter>(endp, in));
+
+        } catch (const std::exception& ex) {
+            LOG(ERROR, "Failed to forward RPC to host {}: {}", 
+                endp.to_string(), ex.what());
+            return false;
+        }
+        id ++;
+    }
+
+    // get responses
+    auto err = 0;
+    std::vector<bloom_filter>& filter_vec = CTX->bloom_filter_vec();
+    filter_vec.resize(CTX->hosts().size());
+    size_t idx = 0;
+
+    for (const auto& h : handles) {
+        try {
+            auto out = h.get().at(0);
+            if (out.err() != 0) {
+                LOG(ERROR, "Host {} returned error: {}", idx, out.err());
+                err = out.err();
+                idx ++;
+                continue;
+            }
+            void* base_ptr = exposed_buffers[idx].begin()->data();
+            char* raw_buf = reinterpret_cast<char*>(base_ptr);
+            //std::cout << "get bloom with size " << buffer_size << std::endl;
+            filter_vec[idx].deserialize(raw_buf, filter_size);
+
+        } catch (const std::exception& ex) {
+            LOG(ERROR, "Error receiving bloom filter from host {}: {}", 
+                idx, ex.what());
+            err = EBUSY;
+        }
+        idx ++;
+    }
+    //std::cout<< "bloom err" <<err << std::endl;
+    return err == 0;
 }
 
 /**

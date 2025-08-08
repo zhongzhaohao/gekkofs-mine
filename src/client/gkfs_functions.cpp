@@ -97,10 +97,12 @@ namespace {
 static void clear_all_pathfs(){
     if(CTX->pathfs().size() > 8192){
         CTX->pathfs().clear();
+        CTX->wrapper_pathfs().clear();
     }
 }
 
 static inline std::string wrapper(std::string prefix, std::string path){
+    if(!CTX->use_registry()) return path;
     if(path == "/") return "/";
     std::string wrapper_path = "/" + prefix + path;
     return wrapper_path;
@@ -116,6 +118,7 @@ static void add_one_pathfs(std::string path, std::string &wrappered_path){
     auto &conf = CTX->hostsconfig();
     auto &pathfs = CTX->pathfs();
     auto &bloom_filter_vec = CTX->bloom_filter_vec();
+    auto &wrapper_pathfs = CTX->wrapper_pathfs();
     if(conf.size() > 1 ){
         if(!pathfs.count(path)){
             for(unsigned int fs = 0; fs < conf.size(); fs++){
@@ -131,17 +134,22 @@ static void add_one_pathfs(std::string path, std::string &wrappered_path){
             } else if(fs_list.size() > 1){
                 gkfs::utils::get_metadata(path);
                 wrappered_path = wrapper(conf[pathfs[path]].flowname, path);
-            } else 
+            } else {
+                pathfs[path] = CTX->local_fs_id();
                 wrappered_path = wrapper(conf[CTX->local_fs_id()].flowname, path);
+            }
         } else {
             wrappered_path = wrapper(conf[pathfs[path]].flowname, path);
         }
     } else if(CTX->use_registry()){
+        pathfs[path] = CTX->local_fs_id();
         wrappered_path = wrapper(conf[CTX->local_fs_id()].flowname, path);
     } else {
         wrappered_path = path;
     }
-    std::cout<< "decided wrapper "<< wrappered_path << std::endl;
+    if(CTX->use_registry())
+        wrapper_pathfs[wrappered_path] = pathfs[path];
+    //std::cout<< "decided wrapper "<< wrappered_path << std::endl;
 }
 
 /**
