@@ -1447,6 +1447,9 @@ na_ucp_context_create(const ucp_config_t *config, bool no_wait,
         context_params.mt_workers_shared = 1;
     }
 
+    ucp_config_modify(config, "NET_DEVICES", "gn0,gni0");
+    ucp_config_modify(config, "TLS", "tcp,glex");
+
     /* Create UCP context */
     status = ucp_init(&context_params, config, &context);
     NA_CHECK_SUBSYS_ERROR(cls, status != UCS_OK, error, ret,
@@ -1901,8 +1904,8 @@ na_ucp_ep_create(ucp_worker_h worker, ucp_ep_params_t *ep_params,
 
     ep_params->field_mask |=
         UCP_EP_PARAM_FIELD_ERR_HANDLER | UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-    if (!(ep_params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS))
-        ep_params->err_mode = UCP_ERR_HANDLING_MODE_PEER;
+    // if (!(ep_params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS))
+    //     ep_params->err_mode = UCP_ERR_HANDLING_MODE_PEER;
     ep_params->err_handler.cb = err_handler_cb;
     ep_params->err_handler.arg = err_handler_arg;
 

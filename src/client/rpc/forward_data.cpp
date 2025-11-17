@@ -37,6 +37,7 @@
 #include <common/rpc/rpc_util.hpp>
 
 #include <unordered_set>
+#include <iostream>
 
 using namespace std;
 
@@ -271,6 +272,7 @@ forward_write(const string& path, const void* buf, const off64_t offset,
         } catch(const std::exception& ex) {
             LOG(ERROR, "Failed to get rpc output for path \"{}\" [peer: {}]",
                 path, targets[idx]);
+            std::cout<< "Forward_write Error:" << ex.what() << std::endl;
             err = EIO;
         }
         idx++;
@@ -526,6 +528,7 @@ forward_read(const string& path, void* buf, const off64_t offset,
         } catch(const std::exception& ex) {
             LOG(ERROR, "Failed to get rpc output for path \"{}\" [peer: {}]",
                 path, targets[idx]);
+            std::cout<< "Forward_read Error:" << ex.what() << std::endl;
             err = EIO;
             // We should get targets[idx] and remove from the list of peers
             failed.insert(targets[idx]);

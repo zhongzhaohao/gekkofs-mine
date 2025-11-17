@@ -232,7 +232,7 @@ OpenFileMap::generate_fd_idx() {
          * which tells can tell the OpenFileMap that it should check if this fd
          * is really safe to use.
          */
-        fd_idx = 100000;
+        fd_idx = 10000;
         fd_validation_needed = true;
     }
     return fd_idx++;
@@ -285,11 +285,11 @@ FileTagMap::FileTagMap() {
 void FileTagMap::get_tags_by_env() {
     char* filePath = std::getenv("FGAP_FILE_TAG"); // get env "FGAP_FILE_TAG"
     //std::cout << "[fgap_debug] in env: " << filePath << std::endl;
-    LOG(INFO, "[fgap_debug] in env, FGAP_FILE_TAG: {}", filePath);
+
     if (filePath != nullptr) {
         //std::cout << "[fgap_debug] parsing file: " << filePath << std::endl;
         LOG(INFO, "[fgap_debug] parsing file: [{}]", filePath);
-    std::ifstream file(filePath);
+        std::ifstream file(filePath);
 
         if (!file) {
             std::cerr << "[fgap_debug] Error opening file: " << filePath << std::endl;
@@ -308,8 +308,7 @@ void FileTagMap::get_tags_by_env() {
             }
         }
     } else {
-        //std::cout << "[fgap_debug] Environment variable FGAP_FILE_TAG is not set." << std::endl;
-    LOG(INFO, "[fgap_debug] Environment variable FGAP_FILE_TAG is not set.");
+        LOG(INFO, "[fgap_debug] Environment variable FGAP_FILE_TAG is not set.");
     }
 }
 
@@ -385,9 +384,8 @@ void FileTagMap::print() {
 //      1 fs1
 // NOTE: Some Index conflict judgments are missing [TODO]
 void FileTagMap::get_set_fs_by_env() {
-    const char* env_var = std::getenv("FGAP_FS"); // get env "FGAP_FS"
+    char* env_var = std::getenv("FGAP_FS"); // get env "FGAP_FS"
     if (!env_var) {
-        std::cerr << "[fgap_debug] Environment variable FGAP_FS is not set." << std::endl;
         return;
     }
 

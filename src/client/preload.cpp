@@ -372,7 +372,7 @@ init_preload() {
     // To prevent this for our internal
     // initialization code, we forcefully occupy the user fd range to force
     // such modules to create fds in our private range.
-    CTX->protect_user_fds();
+    // CTX->protect_user_fds();
 
     log_prog_name();
     gkfs::path::init_cwd();
@@ -382,7 +382,7 @@ init_preload() {
     gkfs::preload::init_environment();
     CTX->enable_interception();
 
-    CTX->unprotect_user_fds();
+    // CTX->unprotect_user_fds();
 
 #ifdef GKFS_ENABLE_FORWARDING
     init_forwarding_mapper();

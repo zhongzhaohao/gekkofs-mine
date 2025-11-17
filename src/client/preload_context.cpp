@@ -444,7 +444,7 @@ int
 PreloadContext::register_internal_fd(int fd) {
 
     assert(fd >= 0);
-
+    return fd;
     if(!internal_fds_must_relocate_) {
         LOG(DEBUG, "registering fd {} as internal (no relocation needed)", fd);
         assert(fd >= MIN_INTERNAL_FD);
@@ -511,7 +511,7 @@ PreloadContext::register_internal_fd(int fd) {
 
 void
 PreloadContext::unregister_internal_fd(int fd) {
-
+    return ;
     LOG(DEBUG, "unregistering internal fd {}", fd);
 
     assert(fd >= MIN_INTERNAL_FD);
@@ -524,7 +524,7 @@ PreloadContext::unregister_internal_fd(int fd) {
 
 bool
 PreloadContext::is_internal_fd(int fd) const {
-
+    return false;
     if(fd < MIN_INTERNAL_FD) {
         return false;
     }
