@@ -177,11 +177,6 @@ protected:
    typedef std::vector<unsigned char> table_type;
 
 public:
-   // Base64编码表（参考网页25、26）
-   static constexpr char base64_chars[] = 
-                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                  "abcdefghijklmnopqrstuvwxyz"
-                  "0123456789+/";
 
    std::string serialize() const {
       std::vector<unsigned char> binary_data;
@@ -201,31 +196,26 @@ public:
       append_binary(binary_data, random_seed_);
       append_binary(binary_data, desired_false_positive_probability_);
 
-      return base64_encode(binary_data.data(), binary_data.size());
+      return std::string(reinterpret_cast<const char*>(binary_data.data()), binary_data.size());
    }
 
    void deserialize(const char* str, size_t size) {
       
-      std::vector<unsigned char> binary_data = base64_decode(str, size);
-      const unsigned char* ptr = binary_data.data();
-      const unsigned char* end = ptr + binary_data.size();
+      const unsigned char* ptr = reinterpret_cast<const unsigned char*>(str);
+      const unsigned char* end = ptr + size;
 
-      // 步骤2：二进制反序列化
-      // 反序列化salt_
       uint64_t salt_size = read_binary<uint64_t>(ptr);
       ptr += sizeof(uint64_t);
       salt_.resize(salt_size);
       std::memcpy(salt_.data(), ptr, salt_size * sizeof(bloom_type));
       ptr += salt_size * sizeof(bloom_type);
 
-      // 反序列化bit_table_
       uint64_t bit_table_size = read_binary<uint64_t>(ptr);
       ptr += sizeof(uint64_t);
       bit_table_.resize(bit_table_size);
       std::memcpy(bit_table_.data(), ptr, bit_table_size);
       ptr += bit_table_size;
 
-      // 反序列化标量成员
       salt_count_ = read_binary<unsigned int>(ptr);
       ptr += sizeof(unsigned int);
       table_size_ = read_binary<unsigned long long>(ptr);
@@ -239,7 +229,6 @@ public:
       desired_false_positive_probability_ = read_binary<double>(ptr);
       ptr += sizeof(double);
 
-      // 验证数据完整性
       if (ptr != end) {
          throw std::runtime_error("Invalid deserialization data");
       }
@@ -261,86 +250,6 @@ public:
       std::memcpy(&value, ptr, sizeof(T));
       return value;
    }
-
-   static std::string base64_encode(const unsigned char* data, size_t len) {
-      std::string ret;
-      int i = 0;
-      uint8_t byte3[3];
-      uint8_t byte4[4];
-
-      while (len--) {
-         byte3[i++] = *(data++);
-         if (i == 3) {
-            byte4[0] = (byte3[0] & 0xfc) >> 2;
-            byte4[1] = ((byte3[0] & 0x03) << 4) | ((byte3[1] & 0xf0) >> 4);
-            byte4[2] = ((byte3[1] & 0x0f) << 2) | ((byte3[2] & 0xc0) >> 6);
-            byte4[3] = byte3[2] & 0x3f;
-
-            for (i = 0; i < 4; i++) 
-                  ret += base64_chars[byte4[i]];
-            i = 0;
-         }
-      }
-      if (i) {
-         for(int j = i; j < 3; j++) 
-            byte3[j] = 0;
-
-         byte4[0] = (byte3[0] & 0xfc) >> 2;
-         byte4[1] = ((byte3[0] & 0x03) << 4) | ((byte3[1] & 0xf0) >> 4);
-         byte4[2] = ((byte3[1] & 0x0f) << 2) | ((byte3[2] & 0xc0) >> 6);
-
-         for (int j = 0; j < i + 1; j++)
-            ret += base64_chars[byte4[j]];
-
-         while(i++ < 3)
-            ret += '=';
-      }
-
-      return ret;
-   }
-
-   static std::vector<unsigned char> base64_decode(const char* encoded, size_t length) {
-      std::vector<unsigned char> ret;
-      int i = 0;
-      uint8_t byte4[4];
-
-      auto get_char_value = [](char c) -> uint8_t {
-         const char* pos = strchr(base64_chars, c);
-         return pos ? pos - base64_chars : 0;
-      };
-
-      while (length-- && encoded[i] != '=') {
-         byte4[i % 4] = get_char_value(encoded[i]);
-         if (++i % 4 == 0) {
-               ret.push_back((byte4[0] << 2) | ((byte4[1] & 0x30) >> 4));
-               ret.push_back(((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2));
-               ret.push_back(((byte4[2] & 0x3) << 6) | byte4[3]);
-         }
-      }
-
-      if (i % 4) {
-         uint8_t temp[3] = {0};
-         int remaining = i % 4;
-         for (int j = 0; j < remaining; j++) {
-               if (i - (i % 4) + j < static_cast<int>(length + i)) {
-                  byte4[j] = get_char_value(encoded[i - (i % 4) + j]);
-               } else {
-                  byte4[j] = 0;
-               }
-         }
-         temp[0] = (byte4[0] << 2) | ((byte4[1] & 0x30) >> 4);
-         temp[1] = ((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2);
-         for (int j = 0; j < remaining - 1; j++) {
-               ret.push_back(temp[j]);
-         }
-      }
-
-      return ret;
-   }
-
-
-
-
 
    bloom_filter()
    : salt_count_(0),
