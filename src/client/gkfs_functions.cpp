@@ -149,7 +149,6 @@ static void add_one_pathfs(std::string path, std::string &wrappered_path){
     }
     if(CTX->use_registry())
         wrapper_pathfs[wrappered_path] = pathfs[path];
-    //std::cout<< "decided wrapper "<< wrappered_path << std::endl;
 }
 
 /**
@@ -1283,7 +1282,7 @@ gkfs_opendir(const std::string& path) {
         return -1;
     }
     std::string wrapper_path = wrapper(CTX->hostsconfig()[CTX->pathfs()[path]].flowname, path);
-    auto ret = gkfs::rpc::forward_get_dirents(wrapper_path);
+    auto ret = gkfs::rpc::forward_get_dirents(wrapper_path, path);
     auto err = ret.first;
     if(err) {
         errno = err;
@@ -1313,7 +1312,7 @@ gkfs_rmdir(const std::string& path) {
         return -1;
     }
     std::string wrapper_path = wrapper(CTX->hostsconfig()[CTX->pathfs()[path]].flowname, path);
-    auto ret = gkfs::rpc::forward_get_dirents(wrapper_path);
+    auto ret = gkfs::rpc::forward_get_dirents(wrapper_path, path);
     auto err = ret.first;
     if(err) {
         errno = err;

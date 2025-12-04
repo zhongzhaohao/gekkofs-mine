@@ -282,8 +282,8 @@ struct Bloom_filter {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const hermes::exposed_memory& buffers)
-            : m_buffers(buffers) {}
+        input(const size_t offset, const hermes::exposed_memory& buffers)
+            : m_offset(offset), m_buffers(buffers) {}
 
         input(input&& rhs) = default;
         input(const input& other) = default;
@@ -291,10 +291,14 @@ struct Bloom_filter {
         input& operator=(const input& other) = default;
 
         explicit input(const rpc_bloom_filter_in_t& other)
-            :m_buffers(other.bulk_handle) {}
+            :m_offset(other.offset), m_buffers(other.bulk_handle) {}
 
         explicit operator rpc_bloom_filter_in_t() {
-            return {hg_bulk_t(m_buffers)};
+            return {m_offset, hg_bulk_t(m_buffers)};
+        }
+
+        size_t offset() const {
+            return m_offset;
         }
 
         hermes::exposed_memory
@@ -303,6 +307,7 @@ struct Bloom_filter {
         }
 
     private:
+        size_t m_offset;
         hermes::exposed_memory m_buffers;
     };
 
@@ -313,10 +318,10 @@ struct Bloom_filter {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        output() : m_err(0), m_io_size(0) {}
+        output() : m_err(0){}
 
-        output(int32_t err, size_t io_size)
-            : m_err(err), m_io_size(io_size) {}
+        output(int32_t err)
+            : m_err(err){}
 
         output(output&& rhs) = default;
         output(const output& other) = default;
@@ -325,24 +330,18 @@ struct Bloom_filter {
 
         explicit output(const rpc_bloom_filter_out_t& out) {
             m_err = out.err;
-            m_io_size = out.io_size;
         }
 
         explicit operator rpc_bloom_filter_out_t() {
-            return {m_err, m_io_size};
+            return {m_err};
         }
 
         int32_t err() const {
             return m_err;
         }
 
-        size_t io_size() const {
-            return m_io_size;
-        }
-
     private:
         int32_t m_err;
-        size_t m_io_size;
     };
 };
 

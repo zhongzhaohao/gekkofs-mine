@@ -93,88 +93,119 @@ forward_get_fs_config() {
  * Gets bloom filter from all daemons
  * @return
  */
-bool 
-forward_get_bloom_filter(size_t size) {
-
+bool forward_get_bloom_filter(size_t size) {
+    const size_t MAX_MEMORY = 64 * 1024 * 1024;
     size_t filter_size = size;
-    size_t buffer_size = size + 10;
+    size_t buffer_size = size;
     size_t hosts_size = CTX->hosts().size();
-    
-    //prepare buffers for bloom filter
-    std::vector<std::unique_ptr<char[]>> bufs;
-    bufs.reserve(CTX->hosts().size());
+    size_t MAX_TOTAL_MEMORY = MAX_MEMORY;
 
-    std::vector<hermes::exposed_memory> exposed_buffers;
-    exposed_buffers.reserve(hosts_size);
-
-    
-    for(std::size_t i = 0; i < hosts_size; ++i){
-        try {
-            std::unique_ptr<char[]> buf(new char[buffer_size]);
-            bufs.push_back(std::move(buf));
-            exposed_buffers.emplace_back(ld_network_service->expose(
-                    std::vector<hermes::mutable_buffer>{hermes::mutable_buffer{
-                            bufs.back().get(), buffer_size}},
-                    hermes::access_mode::write_only));
-        } catch(const std::exception& ex) {
-            LOG(ERROR, "{}() Failed to expose buffers for RMA. err '{}'",
-                __func__, ex.what());
-            return false;
-        }
+    char* shared_buf = (char*)malloc(MAX_TOTAL_MEMORY);
+    if (!shared_buf) {
+        LOG(ERROR, "Failed to allocate memory for buffer");
+        return false;
     }
-
+    
+    std::vector<hermes::mutable_buffer> bufseq{
+        hermes::mutable_buffer{shared_buf, MAX_TOTAL_MEMORY}
+    };
+    
+    hermes::exposed_memory exposed_buffer;
+    try {
+        exposed_buffer = ld_network_service->expose(
+            bufseq, hermes::access_mode::write_only);
+    } catch (const std::exception& ex) {
+        LOG(ERROR, "{}() Failed to expose shared buffer for RMA. err '{}'",
+            __func__, ex.what());
+        std::cout << ex.what() << std::endl;
+        free(shared_buf);
+        return false;
+    }
+    
+    size_t max_hosts_per_group = MAX_TOTAL_MEMORY / buffer_size;
+    if (max_hosts_per_group == 0) {
+        LOG(ERROR, "Filter size too large。");
+        free(shared_buf);
+        return false;
+    }
+    
     std::vector<uint64_t> host_ids(hosts_size);
     std::iota(host_ids.begin(), host_ids.end(), 0);
-    std::random_device rd; // obtain a random number from hardware
-    std::mt19937 g(rd());  // seed the random generator
-    std::shuffle(host_ids.begin(), host_ids.end(), g); // Shuffle hosts vector
-    std::vector<hermes::rpc_handle<gkfs::rpc::Bloom_filter>> handles;
-    auto endp = CTX->hosts().at(0);
-    for (const auto& id : host_ids) {
-        try {
-            endp = CTX->hosts().at(id);
-            LOG(DEBUG, "Sending bloom filter RPC to host: {}", endp.to_string());
-            
-            gkfs::rpc::Bloom_filter::input in(exposed_buffers[id]);
-            handles.emplace_back(
-                ld_network_service->post<gkfs::rpc::Bloom_filter>(endp, in));
-
-        } catch (const std::exception& ex) {
-            LOG(ERROR, "Failed to forward RPC to host {}: {}", 
-                endp.to_string(), ex.what());
-            return false;
-        }
-    }
-
-    // get responses
-    auto err = 0;
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(host_ids.begin(), host_ids.end(), g);
+    
     std::vector<bloom_filter>& filter_vec = CTX->bloom_filter_vec();
     filter_vec.resize(CTX->hosts().size());
-    size_t idx = 0, real_id = 0;
-
-    for (const auto& h : handles) {
-        try {
-            auto out = h.get().at(0);
-            if (out.err() != 0) {
-                LOG(ERROR, "Host {} returned error: {}", idx, out.err());
-                err = out.err();
-                idx ++;
-                continue;
+    
+    int err = 0;
+    size_t total_processed = 0;
+    
+    while (total_processed < hosts_size) {
+        size_t current_group_size = std::min(
+            max_hosts_per_group, 
+            hosts_size - total_processed
+        );
+        std::vector<hermes::rpc_handle<gkfs::rpc::Bloom_filter>> handles;
+        handles.reserve(current_group_size);
+        
+        bool rpc_post_failed = false;
+        for (size_t i = 0; i < current_group_size; ++i) {
+            size_t global_idx = total_processed + i;
+            uint64_t host_id = host_ids[global_idx];
+            
+            try {
+                auto endp = CTX->hosts().at(host_id);
+                LOG(DEBUG, "Sending bloom filter RPC to host: {}", endp.to_string());
+                
+                size_t offset = i * buffer_size;
+                
+                gkfs::rpc::Bloom_filter::input in(offset, exposed_buffer);
+                handles.emplace_back(
+                    ld_network_service->post<gkfs::rpc::Bloom_filter>(endp, in)
+                );
+            } catch (const std::exception& ex) {
+                LOG(ERROR, "Failed to forward RPC to host {}: {}", 
+                    host_id, ex.what());
+                std::cout << ex.what() << std::endl;
+                rpc_post_failed = true;
+                err = -1;
+                break;
             }
-            real_id = host_ids[idx];
-            void* base_ptr = exposed_buffers[real_id].begin()->data();
-            char* raw_buf = reinterpret_cast<char*>(base_ptr);
-            //std::cout << "get bloom with size " << buffer_size << std::endl;
-            filter_vec[real_id].deserialize(raw_buf, filter_size);
-
-        } catch (const std::exception& ex) {
-            LOG(ERROR, "Error receiving bloom filter from host {}: {}", 
-                real_id, ex.what());
-            err = EBUSY;
         }
-        idx ++;
+        
+        if (rpc_post_failed) {
+            break;
+        }
+        
+        for (size_t i = 0; i < current_group_size; ++i) {
+            size_t global_idx = total_processed + i;
+            uint64_t host_id = host_ids[global_idx];
+            
+            try {
+                auto out = handles[i].get().at(0);
+                if (out.err() != 0) {
+                    LOG(ERROR, "Host {} returned error: {}", host_id, out.err());
+                    err = out.err();
+                    continue;
+                }
+                
+                char* raw_buf = shared_buf + (i * buffer_size);
+                filter_vec[host_id].deserialize(raw_buf, filter_size);
+                
+            } catch (const std::exception& ex) {
+                LOG(ERROR, "Error receiving bloom filter from host {}: {}", 
+                    host_id, ex.what());
+                std::cout << ex.what() << std::endl;
+                err = EBUSY;
+            }
+        }
+        
+        total_processed += current_group_size;
     }
-    //std::cout<< "bloom err" <<err << std::endl;
+
+    free(shared_buf);
+    
     return err == 0;
 }
 

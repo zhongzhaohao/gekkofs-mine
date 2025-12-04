@@ -249,10 +249,7 @@ init_environment() {
         exit_error_msg(EXIT_FAILURE,
                        "Failed to load system config: "s + e.what());
     }
-    //debug
-    // for(auto xy: hosts_config){
-    //     std::cout<< " hosts_config is " <<xy.serialize()<< std::endl;
-    // }
+
     CTX->hostsconfig(hosts_config);
 
     if(CTX->use_registry()){
@@ -317,7 +314,6 @@ init_environment() {
         parameters.compute_optimal_parameters();
         bloom_filter filter(parameters);
         size_t size = filter.serialize().size();
-        //std::cout<<"get filter.size "<< size<< std::endl;
         if(!gkfs::rpc::forward_get_bloom_filter(size)) {
             exit_error_msg(
                     EXIT_FAILURE,

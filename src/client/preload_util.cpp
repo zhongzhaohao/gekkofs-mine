@@ -269,7 +269,6 @@ metadata_to_stat(const std::string& path, const gkfs::metadata::Metadata& md,
     else
 #endif
         attr.st_size = md.size();
-
     if(CTX->fs_conf()->atime_state) {
         attr.st_atim.tv_sec = md.atime();
     }

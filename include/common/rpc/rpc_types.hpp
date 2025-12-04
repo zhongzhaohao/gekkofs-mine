@@ -120,11 +120,11 @@ MERCURY_GEN_PROC(
 
 MERCURY_GEN_PROC(
     rpc_bloom_filter_in_t,
-    ((hg_bulk_t) (bulk_handle)))
+    ((hg_size_t) (offset))((hg_bulk_t) (bulk_handle)))
 
 MERCURY_GEN_PROC(
     rpc_bloom_filter_out_t,
-    ((hg_int32_t) (err))((hg_size_t) (io_size)))
+    ((hg_int32_t) (err)))
 
 MERCURY_GEN_PROC(rpc_chunk_stat_in_t, ((hg_int32_t) (dummy)))
 

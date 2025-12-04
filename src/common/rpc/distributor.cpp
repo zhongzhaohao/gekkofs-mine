@@ -105,7 +105,6 @@ SimpleHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
                                    const int num_copy) const {
     unsigned int fs_id = localfs_;
     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
-    //std::cout<< "path "<< path << " fs id "<< fs_infos_.at(fs_id).flowname << std::endl;
     auto &fs_seq_map = fs_infos_.at(fs_id).fs_size_seq;
     if(!cfg::use_PFL)
         return fs_seq_map[(str_hash(path + ::to_string(chnk_id)) + num_copy) 
