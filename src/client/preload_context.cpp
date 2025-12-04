@@ -182,29 +182,24 @@ PreloadContext::use_registry(bool use_registry) {
     use_registry_ = use_registry;
 }
 
-const std::vector<unsigned int>&
+const std::vector<fs_info>&
 PreloadContext::hostsconfig() const {
     return hostsconfig_;
 }
 
 void
-PreloadContext::hostsconfig(const std::vector<unsigned int>& hconfig) {
+PreloadContext::hostsconfig(const std::vector<fs_info>& hconfig) {
     hostsconfig_ = hconfig;
-}
-
-const std::vector<unsigned int>&
-PreloadContext::fspriority() const {
-    return fspriority_;
-}
-
-void
-PreloadContext::fspriority(const std::vector<unsigned int>& hconfig) {
-    fspriority_ = hconfig;
 }
 
 std::map<std::string, unsigned int>&
 PreloadContext::pathfs() {
     return pathfs_;
+}
+
+std::map<std::string, unsigned int>&
+PreloadContext::wrapper_pathfs() {
+    return wrapper_pathfs_;
 }
 
 uint64_t
@@ -221,6 +216,37 @@ std::vector<bloom_filter>&
 PreloadContext::bloom_filter_vec() {
     return bloom_filter_vec_;
 }
+
+void
+PreloadContext::init_threadpool(size_t thread_count){
+    thread_pool_.init(thread_count);
+}
+
+ThreadPool& 
+PreloadContext::thread_pool() {
+    return thread_pool_;
+}
+
+std::string
+PreloadContext::workflow() const {
+    return workflow_;
+}
+
+void
+PreloadContext::workflow(std::string workflow){
+    workflow_ = workflow;
+}
+
+std::string
+PreloadContext::mergeflows() const {
+    return mergeflows_;
+}
+
+void
+PreloadContext::mergeflows(std::string mergeflows){
+    mergeflows_ = mergeflows;
+}
+
 /* --Multiple GekkoFS-- */
 
 void

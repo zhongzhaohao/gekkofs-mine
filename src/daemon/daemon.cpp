@@ -139,7 +139,7 @@ void
 register_server_rpcs(margo_instance_id mid) {
     MARGO_REGISTER(mid, gkfs::rpc::tag::fs_config, void, rpc_config_out_t,
                    rpc_srv_get_fs_config);
-    MARGO_REGISTER(mid, gkfs::rpc::tag::bloom_filter, void, rpc_bloom_filter_out_t,
+    MARGO_REGISTER(mid, gkfs::rpc::tag::bloom_filter, rpc_bloom_filter_in_t, rpc_bloom_filter_out_t,
                     rpc_srv_get_bloom_filter);
     MARGO_REGISTER(mid, gkfs::rpc::tag::create, rpc_mk_node_in_t, rpc_err_out_t,
                    rpc_srv_create);
@@ -373,9 +373,9 @@ init_environment() {
     // Initialize bloom
     bloom_parameters parameters;
     // How many elements roughly do we expect to insert?
-    parameters.projected_element_count = 100000;
+    parameters.projected_element_count = gkfs::config::rpc::bloom_size;
     // Maximum tolerable false positive probability? (0,1)
-    parameters.false_positive_probability = 0.0001; // 1 in 10000
+    parameters.false_positive_probability = gkfs::config::rpc::bloom_ratio;
     parameters.compute_optimal_parameters();
     //Instantiate Bloom Filter
     bloom_filter filter(parameters);

@@ -95,30 +95,58 @@ namespace {
 static void clear_all_pathfs(){
     if(CTX->pathfs().size() > 8192){
         CTX->pathfs().clear();
+        CTX->wrapper_pathfs().clear();
     }
 }
+
+static inline std::string wrapper(std::string prefix, std::string path){
+    if(!CTX->use_registry()) return path;
+    if(path == "/") return "/";
+    std::string wrapper_path = "/" + prefix + path;
+    return wrapper_path;
+}
+
 /**
  * --Multiple GekkoFS--
  * Cache fs id where path exists through get_metadata(path)
  * @param path
  */
-static void add_one_pathfs(std::string path){
+static void add_one_pathfs(std::string path, std::string &wrappered_path){
     std::vector<unsigned int> fs_list;
-    if(CTX->hostsconfig().size() > 1 ){
-        if(!CTX->pathfs().count(path)){
-            for(int fs = 0; fs < CTX->hostsconfig().size(); fs++){
-                auto id = CTX->distributor()->locate_file_metadata_fs(path, 0, fs);
-                if (CTX->bloom_filter_vec().at(id).contains(path)){
+    auto &conf = CTX->hostsconfig();
+    auto &pathfs = CTX->pathfs();
+    auto &bloom_filter_vec = CTX->bloom_filter_vec();
+    auto &wrapper_pathfs = CTX->wrapper_pathfs();
+    if(conf.size() > 1 ){
+        if(!pathfs.count(path)){
+            for(unsigned int fs = 0; fs < conf.size(); fs++){
+                std::string wrapper_path = wrapper(conf[fs].flowname, path);
+                auto id = CTX->distributor()->locate_file_metadata_fs(wrapper_path, 0, fs);
+                if (bloom_filter_vec.at(id).contains(wrapper_path)){
                     fs_list.push_back(fs);
                 }
             }
             if (fs_list.size() == 1){
-                CTX->pathfs()[path] = fs_list.front();
+                pathfs[path] = fs_list.front();
+                wrappered_path = wrapper(conf[fs_list.front()].flowname, path);
             } else if(fs_list.size() > 1){
                 gkfs::utils::get_metadata(path);
+                wrappered_path = wrapper(conf[pathfs[path]].flowname, path);
+            } else {
+                pathfs[path] = CTX->local_fs_id();
+                wrappered_path = wrapper(conf[CTX->local_fs_id()].flowname, path);
             }
+        } else {
+            wrappered_path = wrapper(conf[pathfs[path]].flowname, path);
         }
+    } else if(CTX->use_registry()){
+        pathfs[path] = CTX->local_fs_id();
+        wrappered_path = wrapper(conf[CTX->local_fs_id()].flowname, path);
+    } else {
+        wrappered_path = path;
     }
+    if(CTX->use_registry())
+        wrapper_pathfs[wrappered_path] = pathfs[path];
 }
 
 /**
@@ -333,9 +361,10 @@ gkfs_create(const std::string& path, mode_t mode) {
     }
     // Write to all replicas, at least one need to success
     bool success = false;
-    add_one_pathfs(path);
+    std::string wrapper_path;
+    add_one_pathfs(path, wrapper_path);
     for(auto copy = 0; copy < CTX->get_replicas() + 1; copy++) {
-        auto err = gkfs::rpc::forward_create(path, mode, copy);
+        auto err = gkfs::rpc::forward_create(wrapper_path, mode, copy);
         if(err) {
             errno = err;
         } else {
@@ -368,6 +397,7 @@ gkfs_remove(const std::string& path) {
         errno = EISDIR;
         return -1;
     }
+    std::string wrapper_path = wrapper(CTX->hostsconfig()[CTX->pathfs()[path]].flowname, path);
 #ifdef HAS_SYMLINKS
 #ifdef HAS_RENAME
     if(md.value().blocks() == -1) {
@@ -394,7 +424,7 @@ gkfs_remove(const std::string& path) {
 #endif // HAS_RENAME
 #endif // HAS_SYMLINKS
 
-    auto err = gkfs::rpc::forward_remove(path, CTX->get_replicas());
+    auto err = gkfs::rpc::forward_remove(wrapper_path, CTX->get_replicas());
     if(err) {
         errno = err;
         return -1;
@@ -724,10 +754,11 @@ gkfs_lseek(shared_ptr<gkfs::filemap::OpenFile> gkfs_fd, off_t offset,
             gkfs_fd->pos(gkfs_fd->pos() + offset);
             break;
         case SEEK_END: {
-            add_one_pathfs(gkfs_fd->path());
+            std::string wrapper_path;
+            add_one_pathfs(gkfs_fd->path(), wrapper_path);
             // TODO: handle replicas
             auto ret =
-                    gkfs::rpc::forward_get_metadentry_size(gkfs_fd->path(), 0);
+                    gkfs::rpc::forward_get_metadentry_size(wrapper_path, 0);
             auto err = ret.first;
             if(err) {
                 errno = err;
@@ -777,8 +808,10 @@ gkfs_truncate(const std::string& path, off_t old_size, off_t new_size) {
     if(new_size == old_size) {
         return 0;
     }
+    std::string wrapper_path;
+    add_one_pathfs(path, wrapper_path);
     for(auto copy = 0; copy < (CTX->get_replicas() + 1); copy++) {
-        auto err = gkfs::rpc::forward_decr_size(path, new_size, copy);
+        auto err = gkfs::rpc::forward_decr_size(wrapper_path, new_size, copy);
         if(err) {
             LOG(DEBUG, "Failed to decrease size");
             errno = err;
@@ -786,7 +819,7 @@ gkfs_truncate(const std::string& path, off_t old_size, off_t new_size) {
         }
     }
 
-    auto err = gkfs::rpc::forward_truncate(path, old_size, new_size,
+    auto err = gkfs::rpc::forward_truncate(wrapper_path, old_size, new_size,
                                            CTX->get_replicas());
     if(err) {
         LOG(DEBUG, "Failed to truncate data");
@@ -924,9 +957,10 @@ gkfs_pwrite(std::shared_ptr<gkfs::filemap::OpenFile> file, const char* buf,
     auto is_append = file->get_flag(gkfs::filemap::OpenFile_flags::append);
     auto write_size = 0;
     auto num_replicas = CTX->get_replicas();
-    add_one_pathfs(*path);
+    std::string wrapper_path;
+    add_one_pathfs(*path, wrapper_path);
     auto ret_offset = gkfs::rpc::forward_update_metadentry_size(
-            *path, count, offset, is_append, num_replicas);
+            wrapper_path, count, offset, is_append, num_replicas);
     auto err = ret_offset.first;
     if(err) {
         LOG(ERROR, "update_metadentry_size() failed with err '{}'", err);
@@ -948,12 +982,12 @@ gkfs_pwrite(std::shared_ptr<gkfs::filemap::OpenFile> file, const char* buf,
         offset = ret_offset.second;
     }
 
-    auto ret_write = gkfs::rpc::forward_write(*path, buf, offset, count, 0);
+    auto ret_write = gkfs::rpc::forward_write(wrapper_path, buf, offset, count, 0);
     err = ret_write.first;
     write_size = ret_write.second;
 
     if(num_replicas > 0) {
-        auto ret_write_repl = gkfs::rpc::forward_write(*path, buf, offset,
+        auto ret_write_repl = gkfs::rpc::forward_write(wrapper_path, buf, offset,
                                                        count, num_replicas);
 
         if(err and ret_write_repl.first == 0) {
@@ -1101,20 +1135,21 @@ gkfs_pread(std::shared_ptr<gkfs::filemap::OpenFile> file, char* buf,
     }
     std::pair<int, off_t> ret;
     std::set<int8_t> failed; // set with failed targets.
-    add_one_pathfs(file->path());
+    std::string wrapper_path;
+    add_one_pathfs(file->path(), wrapper_path);
     if(CTX->get_replicas() != 0) {
 
-        ret = gkfs::rpc::forward_read(file->path(), buf, offset, count,
+        ret = gkfs::rpc::forward_read(wrapper_path, buf, offset, count,
                                       CTX->get_replicas(), failed);
         while(ret.first == EIO) {
-            ret = gkfs::rpc::forward_read(file->path(), buf, offset, count,
+            ret = gkfs::rpc::forward_read(wrapper_path, buf, offset, count,
                                           CTX->get_replicas(), failed);
             LOG(WARNING, "gkfs::rpc::forward_read() failed with ret '{}'",
                 ret.first);
         }
 
     } else {
-        ret = gkfs::rpc::forward_read(file->path(), buf, offset, count, 0,
+        ret = gkfs::rpc::forward_read(wrapper_path, buf, offset, count, 0,
                                       failed);
     }
 
@@ -1244,8 +1279,8 @@ gkfs_opendir(const std::string& path) {
         errno = ENOTDIR;
         return -1;
     }
-
-    auto ret = gkfs::rpc::forward_get_dirents(path);
+    std::string wrapper_path = wrapper(CTX->hostsconfig()[CTX->pathfs()[path]].flowname, path);
+    auto ret = gkfs::rpc::forward_get_dirents(wrapper_path, path);
     auto err = ret.first;
     if(err) {
         errno = err;
@@ -1274,8 +1309,8 @@ gkfs_rmdir(const std::string& path) {
         errno = ENOTDIR;
         return -1;
     }
-
-    auto ret = gkfs::rpc::forward_get_dirents(path);
+    std::string wrapper_path = wrapper(CTX->hostsconfig()[CTX->pathfs()[path]].flowname, path);
+    auto ret = gkfs::rpc::forward_get_dirents(wrapper_path, path);
     auto err = ret.first;
     if(err) {
         errno = err;
@@ -1287,7 +1322,7 @@ gkfs_rmdir(const std::string& path) {
         errno = ENOTEMPTY;
         return -1;
     }
-    err = gkfs::rpc::forward_remove(path, CTX->get_replicas());
+    err = gkfs::rpc::forward_remove(wrapper_path, CTX->get_replicas());
     if(err) {
         errno = err;
         return -1;
@@ -1540,8 +1575,9 @@ gkfs_readlink(const std::string& path, char* buf, int bufsize) {
 extern "C" int
 gkfs_getsingleserverdir(const char* path, struct dirent_extended* dirp,
                         unsigned int count, int server) {
-    add_one_pathfs(path);                        
-    auto ret = gkfs::rpc::forward_get_dirents_single(path, server);
+    std::string wrapper_path;
+    add_one_pathfs(path, wrapper_path);                 
+    auto ret = gkfs::rpc::forward_get_dirents_single(wrapper_path, server);
     auto err = ret.first;
     if(err) {
         errno = err;

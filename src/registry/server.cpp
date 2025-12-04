@@ -28,31 +28,42 @@ using namespace std;
 /* example server program.  Starts HG engine, registers the example RPC type,
  * and then executes indefinitely.
  */
-struct cli_options {
-    string register_path;
+struct registry_options {
+    string registry_file_path;
     string rpc_protocol;
+    string listen;
 };
-
 
 int main(int argc, char** argv)
 {
+    CLI::App desc{"Allowed options"};
+    registry_options opts{};
+
+    desc.add_option("--protocol,-P", opts.rpc_protocol,
+        "RPC protocol to use.");
+
+    desc.add_option("--listen,-l", opts.listen,
+        "Address to listen");
+    
+    try {
+        desc.parse(argc, argv);
+    } catch(const CLI::ParseError& e) {
+        return desc.exit(e);
+    }
+
     string registry_file  = gkfs::env::get_var(gkfs::env::REGISTRY_FILE,
                                         gkfs::config::registryfile_path);
-    
     auto rpc_protocol = string(gkfs::rpc::protocol::ofi_sockets);
     string listen = "", bind = "";
-    std::vector<std::string> params(argv, argv + argc);
-    for (size_t i = 1; i < params.size(); ++i) {
-        if (params[i] == "-P" && i + 1 < params.size()) {
-            rpc_protocol = params[i + 1];
-            i++;
-        }
-        else if (params[i] == "-l" && i + 1 < params.size()) {
-            listen = params[i + 1];
-            bind = "://" + listen;
-            i++;
-        }
+
+    if(desc.count("--listen")){
+        listen = opts.listen;
+        bind = "://" + listen;
     }
+    if(desc.count("--protocol")){
+        rpc_protocol = opts.rpc_protocol;
+    }
+
     if(rpc_protocol != gkfs::rpc::protocol::ofi_verbs &&
         rpc_protocol != gkfs::rpc::protocol::ofi_sockets &&
         rpc_protocol != gkfs::rpc::protocol::ofi_psm2 &&

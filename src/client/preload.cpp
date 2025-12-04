@@ -180,10 +180,11 @@ namespace gkfs::preload {
  * Request Registry to auto generate hostfile and hostconfigfile if in need
  */
 int request_registry(){
-    string mergeflows,hostfile,hostconfigfile;
+    string mergeflows,hostfile,hostconfigfile,workflow;
+    gkfs::utils::read_env(workflow,hostfile,hostconfigfile);
     if(!gkfs::utils::CheckMerge(mergeflows,hostfile,hostconfigfile))
         return 0;
-    auto err = gkfs::rpc::forward_request_registry(mergeflows,hostconfigfile,hostfile);
+    auto err = gkfs::rpc::forward_request_registry(mergeflows,hostconfigfile,hostfile,workflow);
     if(err) {
         errno = err;
         return -1;
@@ -240,7 +241,8 @@ init_environment() {
     /* --FGAP-- */
 
     vector<pair<string, string>> hosts{};
-    pair<vector<unsigned int>,vector<unsigned int>> hosts_config{};
+    vector<fs_info> hosts_config{};
+
     try {
         LOG(INFO, "Loading peer addresses...");
         hosts = gkfs::utils::read_hosts_file();
@@ -250,13 +252,17 @@ init_environment() {
     }   
     try {
         LOG(INFO, "Loading system config...");
-        hosts_config = gkfs::utils::read_hosts_config_file(hosts.size());
+        gkfs::utils::read_hosts_config_file(hosts_config, hosts.size());
     } catch(const std::exception& e) {
         exit_error_msg(EXIT_FAILURE,
                        "Failed to load system config: "s + e.what());
     }
-    CTX->hostsconfig(hosts_config.first);
-    CTX->fspriority(hosts_config.second);
+
+    CTX->hostsconfig(hosts_config);
+
+    if(CTX->use_registry()){
+        CTX->init_threadpool(hosts_config.size());
+    }
 
     if(!CTX->use_registry()){
         // initialize Hermes interface to Mercury
@@ -295,7 +301,7 @@ init_environment() {
             CTX->local_host_id(), CTX->hosts().size());
 #else
     auto distributor = std::make_shared<gkfs::rpc::SimpleHashDistributor>(
-            CTX->local_host_id(), CTX->hostsconfig(),&(CTX->pathfs()), CTX->local_fs_id());
+            CTX->local_host_id(), CTX->hostsconfig(), &(CTX->wrapper_pathfs()), CTX->local_fs_id());
 #endif
     CTX->distributor(distributor);
 #endif
@@ -310,7 +316,13 @@ init_environment() {
     }
 
     if(CTX->use_registry()) {
-        if(gkfs::rpc::forward_get_bloom_filter()) {
+        bloom_parameters parameters;
+        parameters.projected_element_count = gkfs::config::rpc::bloom_size;
+        parameters.false_positive_probability = gkfs::config::rpc::bloom_ratio;
+        parameters.compute_optimal_parameters();
+        bloom_filter filter(parameters);
+        size_t size = filter.serialize().size();
+        if(!gkfs::rpc::forward_get_bloom_filter(size)) {
             exit_error_msg(
                     EXIT_FAILURE,
                     "Unable to fetch bloom filter from daemon process through RPC.");

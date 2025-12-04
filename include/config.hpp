@@ -99,6 +99,8 @@ constexpr auto chunk_dir = "chunks";
 } // namespace data
 
 namespace rpc {
+constexpr auto bloom_size = 200000;
+constexpr auto bloom_ratio = 0.0001;
 constexpr auto chunksize = 524288; // in bytes (e.g., 524288 == 512KB)
 /* PFL configuration */
 constexpr auto use_PFL = false;

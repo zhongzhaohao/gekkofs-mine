@@ -250,7 +250,7 @@ struct Bloom_filter {
     using handle_type = hermes::rpc_handle<self_type>;
     using input_type = input;
     using output_type = output;
-    using mercury_input_type = hermes::detail::hg_void_t;
+    using mercury_input_type = rpc_bloom_filter_in_t; ;
     using mercury_output_type = rpc_bloom_filter_out_t;
 
     // RPC public identifier
@@ -269,36 +269,46 @@ struct Bloom_filter {
 
     // Mercury callback to serialize input arguments
     constexpr static const auto mercury_in_proc_cb =
-            hermes::detail::hg_proc_void_t;
+            HG_GEN_PROC_NAME(rpc_bloom_filter_in_t); 
 
     // Mercury callback to serialize output arguments
     constexpr static const auto mercury_out_proc_cb =
             HG_GEN_PROC_NAME(rpc_bloom_filter_out_t);
 
-    class input {
+     class input {
 
         template <typename ExecutionContext>
         friend hg_return_t
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input() {}
+        input(const size_t offset, const hermes::exposed_memory& buffers)
+            : m_offset(offset), m_buffers(buffers) {}
 
         input(input&& rhs) = default;
-
         input(const input& other) = default;
+        input& operator=(input&& rhs) = default;
+        input& operator=(const input& other) = default;
 
-        input&
-        operator=(input&& rhs) = default;
+        explicit input(const rpc_bloom_filter_in_t& other)
+            :m_offset(other.offset), m_buffers(other.bulk_handle) {}
 
-        input&
-        operator=(const input& other) = default;
-
-        explicit input(const hermes::detail::hg_void_t& other) {}
-
-        explicit operator hermes::detail::hg_void_t() {
-            return {};
+        explicit operator rpc_bloom_filter_in_t() {
+            return {m_offset, hg_bulk_t(m_buffers)};
         }
+
+        size_t offset() const {
+            return m_offset;
+        }
+
+        hermes::exposed_memory
+        buffers() const {
+            return m_buffers;
+        }
+
+    private:
+        size_t m_offset;
+        hermes::exposed_memory m_buffers;
     };
 
     class output {
@@ -308,39 +318,29 @@ struct Bloom_filter {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        output()
-            : m_bloom_filter_str(), m_err(){}
+        output() : m_err(0){}
 
-        output(const std::string bloom_filter_str, int32_t err)
-            : m_bloom_filter_str(bloom_filter_str), m_err(err) {}
+        output(int32_t err)
+            : m_err(err){}
 
         output(output&& rhs) = default;
-
         output(const output& other) = default;
-
-        output&
-        operator=(output&& rhs) = default;
-
-        output&
-        operator=(const output& other) = default;
+        output& operator=(output&& rhs) = default;
+        output& operator=(const output& other) = default;
 
         explicit output(const rpc_bloom_filter_out_t& out) {
-            m_bloom_filter_str = out.bloom_filter_str;
             m_err = out.err;
         }
 
-        int32_t
-        err() const {
+        explicit operator rpc_bloom_filter_out_t() {
+            return {m_err};
+        }
+
+        int32_t err() const {
             return m_err;
         }
 
-        std::string
-        bloom_filter_str() const{
-            return m_bloom_filter_str;
-        }
-
     private:
-        std::string m_bloom_filter_str;
         int32_t m_err;
     };
 };
@@ -389,8 +389,10 @@ struct registry_request {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const std::string& merge_flows, const std::string& merge_hcfile, const std::string& merge_hfile)
-            : m_merge_flows(merge_flows), m_merge_hcfile(merge_hcfile), m_merge_hfile(merge_hfile){}
+        input(const std::string& merge_flows, const std::string& merge_hcfile, 
+            const std::string& merge_hfile, const std::string& flow)
+            : m_merge_flows(merge_flows), m_merge_hcfile(merge_hcfile), 
+            m_merge_hfile(merge_hfile), m_flow(flow) {}
 
         input(input&& rhs) = default;
 
@@ -403,11 +405,13 @@ struct registry_request {
         operator=(const input& other) = default;
 
         explicit input(const rpc_registry_request_in_t& other)
-            : m_merge_flows(other.merge_flows), m_merge_hcfile(other.merge_hcfile), m_merge_hfile(other.merge_hfile){}
+            : m_merge_flows(other.merge_flows), m_merge_hcfile(other.merge_hcfile), 
+            m_merge_hfile(other.merge_hfile), m_flow(other.flow) {}
 
 
         explicit operator rpc_registry_request_in_t() {
-            return { m_merge_flows.c_str(),m_merge_hcfile.c_str(),m_merge_hfile.c_str()};
+            return { m_merge_flows.c_str(), m_merge_hcfile.c_str(),
+                    m_merge_hfile.c_str(), m_flow.c_str()};
         }
 
         std::string
@@ -416,19 +420,25 @@ struct registry_request {
         }
 
         std::string
-        mountdir() const {
+        merge_hcfile() const {
             return m_merge_hcfile;
         }
 
         std::string
-        rootdir() const {
+        merge_hfile() const {
             return m_merge_hfile;
+        }
+
+        std::string
+        flow() const {
+            return m_flow;
         }
 
     private:
         std::string m_merge_flows;
         std::string m_merge_hcfile;
         std::string m_merge_hfile;
+        std::string m_flow;
     };
 
     class output {

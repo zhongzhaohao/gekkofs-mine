@@ -546,8 +546,21 @@ rpc_srv_get_dirents(hg_handle_t handle) {
 
     // Get directory entries from local DB
     vector<pair<string, bool>> entries{};
+    vector<pair<string, bool>> ent_perflow{};
     try {
-        entries = gkfs::metadata::get_dirents(in.path);
+        std::vector<std::string> result;
+        if (in.path[0] != '/') {
+            std::stringstream ss(in.path);
+            std::string flow;
+            while (std::getline(ss, flow, ';')) {
+                std::string tofind = "/" + flow + "/";
+                auto ent_perflow = gkfs::metadata::get_dirents(tofind);
+                entries.insert(entries.end(), ent_perflow.begin(), ent_perflow.end());
+            }
+        } else {
+            entries = gkfs::metadata::get_dirents(in.path);
+        }
+
     } catch(const ::exception& e) {
         GKFS_DATA->spdlogger()->error("{}() Error during get_dirents(): '{}'",
                                       __func__, e.what());

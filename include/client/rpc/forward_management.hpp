@@ -37,10 +37,10 @@ forward_get_fs_config();
 
 /* --Multiple GekkoFS-- */
 bool
-forward_get_bloom_filter();
+forward_get_bloom_filter(size_t size);
 
 int
-forward_request_registry(std::string flows, std::string hcfile, std::string hfile);
+forward_request_registry(std::string flows, std::string hcfile, std::string hfile, std::string workflow);
 
 int
 forward_register_registry(std::string work_flow, std::string hcfile, std::string hfile);

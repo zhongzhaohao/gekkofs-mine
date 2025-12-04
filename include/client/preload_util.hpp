@@ -32,6 +32,7 @@
 
 #include <client/preload.hpp>
 #include <common/metadata.hpp>
+#include <common/fs_info.hpp>
 #include <string>
 #include <iostream>
 #include <map>
@@ -90,9 +91,8 @@ void
 connect_to_hosts(const std::vector<std::pair<std::string, std::string>>& hosts);
 
 /* --Multiple GekkoFS-- */
-
-std::pair<std::vector<unsigned int>, std::vector<unsigned int>>
-read_hosts_config_file(unsigned int all_hosts);
+void 
+read_hosts_config_file(std::vector<fs_info>&hostconfig, unsigned int all_hosts);
 
 std::string
 read_registry_file();

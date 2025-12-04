@@ -30,6 +30,12 @@
 #include <sstream>
 #include <cstring>
 
+#ifndef FALLTHROUGH_INTENDED
+#define FALLTHROUGH_INTENDED \
+  do {                       \
+  } while (0)
+#endif
+
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 
 static const unsigned char bit_mask[bits_per_char] = {
@@ -198,11 +204,9 @@ public:
       return base64_encode(binary_data.data(), binary_data.size());
    }
 
-   // 反序列化
-   void deserialize(const std::string& str) {
+   void deserialize(const char* str, size_t size) {
       
-      // 步骤1：Base64解码
-      std::vector<unsigned char> binary_data = base64_decode(str);
+      std::vector<unsigned char> binary_data = base64_decode(str, size);
       const unsigned char* ptr = binary_data.data();
       const unsigned char* end = ptr + binary_data.size();
 
@@ -295,9 +299,8 @@ public:
       return ret;
    }
 
-   static std::vector<unsigned char> base64_decode(const std::string& encoded) {
+   static std::vector<unsigned char> base64_decode(const char* encoded, size_t length) {
       std::vector<unsigned char> ret;
-      size_t in_len = encoded.size();
       int i = 0;
       uint8_t byte4[4];
 
@@ -306,24 +309,30 @@ public:
          return pos ? pos - base64_chars : 0;
       };
 
-      while (in_len-- && encoded[i] != '=') {
-         byte4[i%4] = get_char_value(encoded[i]);
-         if (++i%4 == 0) {
-            ret.push_back((byte4[0] << 2) | ((byte4[1] & 0x30) >> 4));
-            ret.push_back(((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2));
-            ret.push_back(((byte4[2] & 0x3) << 6) | byte4[3]);
+      while (length-- && encoded[i] != '=') {
+         byte4[i % 4] = get_char_value(encoded[i]);
+         if (++i % 4 == 0) {
+               ret.push_back((byte4[0] << 2) | ((byte4[1] & 0x30) >> 4));
+               ret.push_back(((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2));
+               ret.push_back(((byte4[2] & 0x3) << 6) | byte4[3]);
          }
       }
-      if (i%4) {
-         uint8_t temp[3] = {0};
-         for(int j = 0; j < i%4; j++)
-            byte4[j] = get_char_value(encoded[i - (i%4) + j]);
 
+      if (i % 4) {
+         uint8_t temp[3] = {0};
+         int remaining = i % 4;
+         for (int j = 0; j < remaining; j++) {
+               if (i - (i % 4) + j < static_cast<int>(length + i)) {
+                  byte4[j] = get_char_value(encoded[i - (i % 4) + j]);
+               } else {
+                  byte4[j] = 0;
+               }
+         }
          temp[0] = (byte4[0] << 2) | ((byte4[1] & 0x30) >> 4);
          temp[1] = ((byte4[1] & 0xf) << 4) | ((byte4[2] & 0x3c) >> 2);
-
-         for (int j = 0; j < i%4 - 1; j++)
-            ret.push_back(temp[j]);
+         for (int j = 0; j < remaining - 1; j++) {
+               ret.push_back(temp[j]);
+         }
       }
 
       return ret;
@@ -418,17 +427,58 @@ public:
       std::fill(bit_table_.begin(), bit_table_.end(), static_cast<unsigned char>(0x00));
       inserted_element_count_ = 0;
    }
+   inline uint32_t DecodeFixed32(const unsigned char * ptr) const {
+	const uint8_t* const buffer = reinterpret_cast<const uint8_t*>(ptr);
+
+	// Recent clang and gcc optimize this to a single mov / ldr instruction.
+	return (static_cast<uint32_t>(buffer[0])) |
+			(static_cast<uint32_t>(buffer[1]) << 8) |
+			(static_cast<uint32_t>(buffer[2]) << 16) |
+			(static_cast<uint32_t>(buffer[3]) << 24);
+	}
+
+	uint32_t Hash(const unsigned char* data, size_t n, uint32_t seed) const {
+	// Similar to murmur hash
+	const uint32_t m = 0xc6a4a793;
+	const uint32_t r = 24;
+	const unsigned char* limit = data + n;
+	uint32_t h = seed ^ (n * m);
+
+	// Pick up four bytes at a time
+	while (limit - data >= 4) {
+		uint32_t w = DecodeFixed32(data);
+		data += 4;
+		h += w;
+		h *= m;
+		h ^= (h >> 16);
+	}
+
+	// Pick up remaining bytes
+	switch (limit - data) {
+		case 3:
+		h += static_cast<uint8_t>(data[2]) << 16;
+		FALLTHROUGH_INTENDED;
+		case 2:
+		h += static_cast<uint8_t>(data[1]) << 8;
+		FALLTHROUGH_INTENDED;
+		case 1:
+		h += static_cast<uint8_t>(data[0]);
+		h *= m;
+		h ^= (h >> r);
+		break;
+	}
+	return h;
+	}
 
    inline void insert(const unsigned char* key_begin, const std::size_t& length)
    {
-      std::size_t bit_index = 0;
-      std::size_t bit       = 0;
-
-      for (std::size_t i = 0; i < salt_.size(); ++i)
-      {
-         compute_indices(hash_ap(key_begin, length, salt_[i]), bit_index, bit);
-
-         bit_table_[bit_index / bits_per_char] |= bit_mask[bit];
+	  uint32_t bits = bit_table_.size() * 8;
+	  uint32_t h = Hash(key_begin, length, 0xbc9f1d34);
+      const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+      for (size_t j = 0; j < salt_.size(); j++) {
+        const uint32_t bitpos = h % bits;
+        bit_table_[bitpos / 8] |= (1 << (bitpos % 8));
+        h += delta;
       }
 
       ++inserted_element_count_;
@@ -464,20 +514,16 @@ public:
 
    inline virtual bool contains(const unsigned char* key_begin, const std::size_t length) const
    {
-      std::size_t bit_index = 0;
-      std::size_t bit       = 0;
+		uint32_t bits = bit_table_.size() * 8;
+		uint32_t h = Hash(key_begin, length, 0xbc9f1d34);
+		const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+		for (size_t j = 0; j < salt_.size(); j++) {
+			const uint32_t bitpos = h % bits;
+			if ((bit_table_[bitpos / 8] & (1 << (bitpos % 8))) == 0) return false;
+			h += delta;
+		}
 
-      for (std::size_t i = 0; i < salt_.size(); ++i)
-      {
-         compute_indices(hash_ap(key_begin, length, salt_[i]), bit_index, bit);
-
-         if ((bit_table_[bit_index / bits_per_char] & bit_mask[bit]) != bit_mask[bit])
-         {
-            return false;
-         }
-      }
-
-      return true;
+		return true;
    }
 
    template <typename T>
@@ -882,16 +928,3 @@ private:
 };
 
 #endif
-
-
-/*
-  Note 1:
-  If it can be guaranteed that bits_per_char will be of the form 2^n then
-  the following optimization can be used:
-
-  bit_table_[bit_index >> n] |= bit_mask[bit_index & (bits_per_char - 1)];
-
-  Note 2:
-  For performance reasons where possible when allocating memory it should
-  be aligned (aligned_alloc) according to the architecture being used.
-*/

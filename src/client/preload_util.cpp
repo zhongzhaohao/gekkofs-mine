@@ -269,7 +269,6 @@ metadata_to_stat(const std::string& path, const gkfs::metadata::Metadata& md,
     else
 #endif
         attr.st_size = md.size();
-
     if(CTX->fs_conf()->atime_state) {
         attr.st_atim.tv_sec = md.atime();
     }
@@ -379,6 +378,10 @@ void read_env(string &workflow,string &hostfile,string &hostconfigfile){
                                   gkfs::config::hostfile_config_path);
     workflow = gkfs::env::get_var(gkfs::env::WORK_FLOW,
                                   "default_job");//todo default name of work flow
+    auto mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
+                            "");
+    CTX->workflow(workflow);
+    CTX->mergeflows(mergeflows);
 }
 
 /**
@@ -405,10 +408,6 @@ bool CheckMerge(string &mergeflows,string &hostfile,string &hostconfigfile) {
 
     auto merge = gkfs::env::get_var(gkfs::env::MERGE,
                                   gkfs::config::merge_default);
-    hostfile = gkfs::env::get_var(gkfs::env::HOSTS_FILE,
-                                  gkfs::config::hostfile_path);  
-    hostconfigfile = gkfs::env::get_var(gkfs::env::HOSTS_CONFIG_FILE,
-                                  gkfs::config::hostfile_config_path);
     mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
                                   "");
 
@@ -454,39 +453,38 @@ read_registry_file() {
 /**
  * --Mulitple GekkoFS--
  * Get HostSize(number of daemon) and FsPriority of Each GekkoFS
- * @return pair<hostsize_vector, priority_vector>
  */
-pair<vector<unsigned int>,vector<unsigned int> >
-read_hosts_config_file(unsigned int all_hosts) {
-    if(!CTX->use_registry())
-        return {{all_hosts},{1}};
+void 
+read_hosts_config_file(std::vector<fs_info>& hostconfig, 
+                       unsigned int all_hosts) {
+    if(!CTX->use_registry()){
+        std::vector<uint32_t> lines(all_hosts);
+        std::iota(lines.begin(), lines.end(), 0);
+        fs_info fs_conf = {"default_job", lines, 0};
+        hostconfig.push_back(fs_conf);
+        return ;
+    }
     string hostconfigfile;
-    unsigned int hostconfigfile_hosts = 0, hostfile_hosts = all_hosts;
     hostconfigfile = gkfs::env::get_var(gkfs::env::HOSTS_CONFIG_FILE,
                                   gkfs::config::hostfile_config_path);
-    ifstream lf(hostconfigfile);
-    string line;
-    vector<unsigned int> hcfile,fspriority;
-    while (getline(lf, line)){
-        std::istringstream iss(line);
-        unsigned int x,y;
-        if(!(iss >> x >> y)){
-            throw runtime_error(fmt::format("Invalid file format: '{}'", hostconfigfile));
-        }
-        hcfile.push_back(x);
-        hostconfigfile_hosts += x;
-        fspriority.push_back(y);
-    }
     
-    if(hcfile.empty()) {
-        throw runtime_error(fmt::format("HostConfigfile empty: '{}'", hostconfigfile));
+    ifstream hcfile(hostconfigfile);
+    std::string line;
+    while(getline(hcfile, line)){
+        fs_info fs_conf;
+        bool ok = fs_info::deserialize(line, fs_conf);
+        if(ok)
+            hostconfig.push_back(fs_conf);
     }
 
-    LOG(INFO, "Hosts config pool size: {}", hcfile.size());
-    if(hostconfigfile_hosts != hostfile_hosts){
-        throw runtime_error(fmt::format("HostConfigfile do not match Hostfile: '{}' daemons  compared to '{}' daemons", hostconfigfile_hosts, hostfile_hosts));
+    if(hostconfig.empty()) {
+        std::vector<uint32_t> lines(all_hosts);
+        std::iota(lines.begin(), lines.end(), 0);
+        fs_info fs_conf = {CTX->workflow(), lines, 0};
+        hostconfig.push_back(fs_conf);
     }
-    return {hcfile,fspriority};
+
+    LOG(INFO, "Hosts config pool size: {}", hostconfig.size());
 }
 
 vector<pair<string, string>>
@@ -561,15 +559,15 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
         LOG(WARNING, "Failed to find local host. Using host '0' as local host");
         CTX->local_host_id(0);
     }
-    int id = CTX->local_host_id();
+    // unsigned int max_fs_size = 0, max_fs_id = 0;
+    // for(unsigned int fs = 0;fs < CTX->hostsconfig().size(); fs++){
+    //     auto size = CTX->hostsconfig()[fs].fs_size_seq.size();
+    //     if(size > max_fs_size){
+    //         max_fs_id = fs;
+    //         max_fs_size = size;
+    //     }
+    // }
     CTX->local_fs_id(0);
-    for(unsigned int fs = 0;fs < CTX->hostsconfig().size(); fs++){
-        id -= CTX->hostsconfig()[fs];
-        if(id < 0) {
-            CTX->local_fs_id(fs);
-            break;
-        }
-    }
     CTX->hosts(addrs);
     CTX->hosts_name(hosts_name);
 }

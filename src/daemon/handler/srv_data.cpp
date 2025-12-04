@@ -188,7 +188,6 @@ rpc_srv_write(hg_handle_t handle) {
         return gkfs::rpc::cleanup_respond(&handle, &in, &out, &bulk_handle);
     }
     auto const host_id = in.host_id;
-    [[maybe_unused]] auto const host_size = in.host_size;
 
     auto path = make_shared<string>(in.path);
     // chnk_ids used by this host
@@ -447,7 +446,7 @@ rpc_srv_read(hg_handle_t handle) {
     GKFS_DATA->spdlogger()->debug(
             "{}() path: '{}' chunk_start '{}' chunk_end '{}' chunk_n '{}' total_chunk_size '{}' bulk_size: '{}' offset: '{}'",
             __func__, in.path, in.chunk_start, in.chunk_end, in.chunk_n,
-            in.total_chunk_size, bulk_size, in.offset);
+            in.total_chunk_size, bulk_size, in.offset);    
     std::vector<uint8_t> read_bitset_vect =
             gkfs::rpc::decompress_bitset(in.wbitset);
 #ifdef GKFS_ENABLE_AGIOS

@@ -119,8 +119,12 @@ MERCURY_GEN_PROC(
                 (hg_uint32_t) (gid)))
 
 MERCURY_GEN_PROC(
-        rpc_bloom_filter_out_t,
-        ((hg_const_string_t) (bloom_filter_str))((hg_int32_t) (err)))
+    rpc_bloom_filter_in_t,
+    ((hg_size_t) (offset))((hg_bulk_t) (bulk_handle)))
+
+MERCURY_GEN_PROC(
+    rpc_bloom_filter_out_t,
+    ((hg_int32_t) (err)))
 
 MERCURY_GEN_PROC(rpc_chunk_stat_in_t, ((hg_int32_t) (dummy)))
 
@@ -136,11 +140,13 @@ MERCURY_GEN_PROC(
 
 MERCURY_GEN_PROC(
         rpc_registry_request_in_t,
-        ((hg_const_string_t) (merge_flows))((hg_const_string_t) (merge_hcfile))((hg_const_string_t) (merge_hfile)))
+        ((hg_const_string_t) (merge_flows))((hg_const_string_t) (merge_hcfile))
+        ((hg_const_string_t) (merge_hfile))((hg_const_string_t) (flow)))
 
 MERCURY_GEN_PROC(
         rpc_registry_register_in_t,
-        ((hg_const_string_t) (work_flow))((hg_const_string_t) (hcfile))((hg_const_string_t) (hfile)))
+        ((hg_const_string_t) (work_flow))((hg_const_string_t) (hcfile))
+        ((hg_const_string_t) (hfile)))
 
 //stage
 MERCURY_GEN_PROC(

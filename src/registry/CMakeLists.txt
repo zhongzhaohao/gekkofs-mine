@@ -37,6 +37,7 @@ target_sources(
   gkfs_registry
   PRIVATE server.cpp
           my-rpc.cpp
+          utils.cpp
   PUBLIC ${CMAKE_SOURCE_DIR}/include/config.hpp
          ${CMAKE_SOURCE_DIR}/include/version.hpp.in
 )

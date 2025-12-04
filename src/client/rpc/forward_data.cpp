@@ -65,7 +65,6 @@ using gkfs::utils::arithmetic::last_smaller_equal;
 pair<int, ssize_t>
 forward_write(const string& path, const void* buf, const off64_t offset,
               const size_t write_size, const int8_t num_copies) {
-
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
 
@@ -186,13 +185,7 @@ forward_write(const string& path, const void* buf, const off64_t offset,
 
         auto endp = CTX->hosts().at(target);
         /* --Multiple GekkoFS--*/
-        // Client HostID global view -> target
-        // Daemon HostID local  view -> target - prefix
-        unsigned int prefix = 0;
-        for(unsigned int FSID = 0; FSID < CTX->distributor()->locate_fs(path); FSID ++){
-            prefix += CTX->hostsconfig().at(FSID);
-        }
-        prefix = prefix > target? target:prefix;
+        auto fs_id = CTX->distributor()->locate_fs(path);
         /* --Multiple GekkoFS--*/
         try {
             LOG(DEBUG, "Sending RPC ...");
@@ -203,8 +196,8 @@ forward_write(const string& path, const void* buf, const off64_t offset,
                     // a potential offset
                     block_overrun(offset, gkfs::config::rpc::chunksize),
                     /* --Multiple GekkoFS--*/
-                    target - prefix,
-                    CTX->hostsconfig().at(CTX->distributor()->locate_fs(path)), 
+                    target,
+                    CTX->hostsconfig().at(fs_id).fs_size_seq.size(),
                     /* --Multiple GekkoFS--*/
                     // number of chunks handled by that destination
                     gkfs::rpc::compress_bitset(write_ops_vect[target]),
@@ -326,7 +319,6 @@ pair<int, ssize_t>
 forward_read(const string& path, void* buf, const off64_t offset,
              const size_t read_size, const int8_t num_copies,
              std::set<int8_t>& failed) {
-
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
 
@@ -446,13 +438,7 @@ forward_read(const string& path, void* buf, const off64_t offset,
 
         auto endp = CTX->hosts().at(target);
         /* --Multiple GekkoFS--*/
-        // Client HostID global view -> target
-        // Daemon HostID local  view -> target - prefix
-        unsigned int prefix = 0;
-        for(unsigned int FSID = 0; FSID < CTX->distributor()->locate_fs(path); FSID ++){
-            prefix += CTX->hostsconfig().at(FSID);
-        }
-        prefix = prefix > target? target:prefix;
+        auto fs_id = CTX->distributor()->locate_fs(path);
         /* --Multiple GekkoFS--*/
         try {
 
@@ -464,8 +450,8 @@ forward_read(const string& path, void* buf, const off64_t offset,
                     // a potential offset
                     block_overrun(offset, gkfs::config::rpc::chunksize), 
                     /* --Multiple GekkoFS--*/
-                    target - prefix,
-                    CTX->hostsconfig().at(CTX->distributor()->locate_fs(path)),
+                    target,
+                    CTX->hostsconfig().at(fs_id).fs_size_seq.size(),
                     /* --Multiple GekkoFS--*/
                     gkfs::rpc::compress_bitset(read_bitset_vect[target]),
                     // number of chunks handled by that destination
@@ -561,7 +547,6 @@ forward_read(const string& path, void* buf, const off64_t offset,
 int
 forward_truncate(const std::string& path, size_t current_size, size_t new_size,
                  const int8_t num_copies) {
-
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
 
@@ -587,7 +572,6 @@ forward_truncate(const std::string& path, size_t current_size, size_t new_size,
     auto err = 0;
 
     for(const auto& host : hosts) {
-
         auto endp = CTX->hosts().at(host);
 
         try {
@@ -614,7 +598,6 @@ forward_truncate(const std::string& path, size_t current_size, size_t new_size,
                    // here
         }
     }
-
     // Wait for RPC responses and then get response
     for(const auto& h : handles) {
         try {

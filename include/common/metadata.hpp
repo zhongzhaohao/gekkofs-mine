@@ -50,7 +50,8 @@ private:
                      // with noatime
     time_t mtime_{}; // modify time. gets updated when file content is modified.
     time_t ctime_{}; // change time. gets updated when the file attributes are
-                     // changed AND when file content is modified.
+                     // changed AND when file content is modified. used for 
+                     // create time in /* --Multiple GekkoFS--*/
     mode_t mode_{};
     nlink_t link_count_{}; // number of names for this inode (hardlinks)
     size_t size_{};     // size_ in bytes, might be computed instead of stored
