@@ -470,11 +470,13 @@ read_hosts_config_file(std::vector<fs_info>& hostconfig,
     
     ifstream hcfile(hostconfigfile);
     std::string line;
-    while(getline(hcfile, line)){
-        fs_info fs_conf;
-        bool ok = fs_info::deserialize(line, fs_conf);
-        if(ok)
-            hostconfig.push_back(fs_conf);
+    if(hcfile){
+        while(getline(hcfile, line)){
+            fs_info fs_conf;
+            bool ok = fs_info::deserialize(line, fs_conf);
+            if(ok)
+                hostconfig.push_back(fs_conf);
+        }
     }
 
     if(hostconfig.empty()) {
