@@ -133,6 +133,11 @@ MERCURY_GEN_PROC(
         ((hg_int32_t) (err))((hg_uint64_t) (chunk_size))(
                 (hg_uint64_t) (chunk_total))((hg_uint64_t) (chunk_free)))
 
+//management
+// MERCURY_GEN_PROC(
+//         rpc_daemon_update_epoch_in_t,
+//         ((hg_const_string_t) (action))((hg_const_string_t) (hostfile)))
+
 //registry
 MERCURY_GEN_PROC(
         rpc_registry_request_out_t,

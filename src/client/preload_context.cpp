@@ -173,13 +173,13 @@ PreloadContext::registry(const hermes::endpoint& registry) {
 }
 
 bool
-PreloadContext::use_registry() const {
-    return use_registry_;
+PreloadContext::use_workflow() const {
+    return use_workflow_;
 }
 
 void
-PreloadContext::use_registry(bool use_registry) {
-    use_registry_ = use_registry;
+PreloadContext::use_workflow(bool use_workflow) {
+    use_workflow_ = use_workflow;
 }
 
 const std::vector<fs_info>&

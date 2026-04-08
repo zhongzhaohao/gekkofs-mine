@@ -83,7 +83,7 @@ forward_create(const std::string& path, const mode_t mode, const int copy) {
         if(out.err()){
             return out.err();
         }
-        if(CTX->use_registry())
+        if(CTX->use_workflow())
            CTX->bloom_filter_vec().at(id).insert(path);
         return 0;
     } catch(const std::exception& ex) {
@@ -122,7 +122,7 @@ forward_getSuccessResponseThread(void* data){
 }
 
 static inline std::string wrapper(std::string prefix, std::string path){
-    if(!CTX->use_registry()) return path;
+    if(!CTX->use_workflow()) return path;
     if(path == "/") return "/";
     std::string wrapper_path = "/" + prefix + path;
     return wrapper_path;
@@ -804,7 +804,7 @@ forward_get_dirents(const string& path, const std::string& unwrapper_path) {
     // send RPCs
     std::vector<hermes::rpc_handle<gkfs::rpc::get_dirents>> handles;
     std::string info_flows = path;
-    if(path == "/" && CTX->use_registry()) 
+    if(path == "/" && CTX->use_workflow()) 
         info_flows = CTX->workflow() +";" + CTX->mergeflows();
     
 

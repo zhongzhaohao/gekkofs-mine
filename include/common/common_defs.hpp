@@ -43,6 +43,7 @@ constexpr auto registry_request = "rpc_srv_registry_request";
 constexpr auto registry_register = "rpc_srv_registry_register";
 constexpr auto stage = "rpc_srv_stage";
 constexpr auto stage_metadata = "rpc_srv_stage_metadata";
+//constexpr auto daemon_update_epoch = "rpc_srv_daemon_update_epoch"; /* mallleability */
 constexpr auto create = "rpc_srv_mk_node";
 constexpr auto stat = "rpc_srv_stat";
 constexpr auto remove_metadata = "rpc_srv_rm_metadata";

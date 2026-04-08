@@ -94,21 +94,6 @@ connect_to_hosts(const std::vector<std::pair<std::string, std::string>>& hosts);
 void 
 read_hosts_config_file(std::vector<fs_info>&hostconfig, unsigned int all_hosts);
 
-std::string
-read_registry_file();
-
-void read_env(std::string &workflow,std::string &hostfile,
-              std::string &hostconfigfile);
-
-void Set_ctx_vars();
-
-bool
-CheckMerge(std::string &workflows,std::string &hostfile,
-           std::string &hostconfigfile);
-
-void
-connect_to_registry(const std::string addr);
-
 /* --Multiple GekkoFS-- */
 
 } // namespace gkfs::utils

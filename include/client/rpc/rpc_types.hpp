@@ -250,7 +250,7 @@ struct Bloom_filter {
     using handle_type = hermes::rpc_handle<self_type>;
     using input_type = input;
     using output_type = output;
-    using mercury_input_type = rpc_bloom_filter_in_t; ;
+    using mercury_input_type = rpc_bloom_filter_in_t;
     using mercury_output_type = rpc_bloom_filter_out_t;
 
     // RPC public identifier

@@ -104,7 +104,7 @@ private:
 
     /* --Multiple GekkoFS-- */
     hermes::endpoint registry_; // Registry endp
-    bool use_registry_; // Use or not
+    bool use_workflow_; // Use or not
     std::vector<fs_info> hostsconfig_; // Host(Daemon) config of Each GekkoFS
     std::map<std::string, unsigned int> pathfs_; // Cache of GekkoFS id where path exists
     std::map<std::string, unsigned int> wrapper_pathfs_; // Cache of GekkoFS id where wrapper path exists
@@ -182,10 +182,10 @@ public:
     registry(const hermes::endpoint &registry);
 
     bool
-    use_registry() const;
+    use_workflow() const;
 
     void
-    use_registry(bool use);
+    use_workflow(bool use);
 
     const std::vector<fs_info>&
     hostsconfig() const;

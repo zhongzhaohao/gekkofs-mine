@@ -36,7 +36,8 @@ add_executable(gkfs_registry)
 target_sources(
   gkfs_registry
   PRIVATE server.cpp
-          my-rpc.cpp
+          rpc/serve.cpp
+          rpc/forward.cpp
           utils.cpp
   PUBLIC ${CMAKE_SOURCE_DIR}/include/config.hpp
          ${CMAKE_SOURCE_DIR}/include/version.hpp.in

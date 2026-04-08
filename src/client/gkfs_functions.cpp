@@ -100,7 +100,7 @@ static void clear_all_pathfs(){
 }
 
 static inline std::string wrapper(std::string prefix, std::string path){
-    if(!CTX->use_registry()) return path;
+    if(!CTX->use_workflow()) return path;
     if(path == "/") return "/";
     std::string wrapper_path = "/" + prefix + path;
     return wrapper_path;
@@ -139,13 +139,13 @@ static void add_one_pathfs(std::string path, std::string &wrappered_path){
         } else {
             wrappered_path = wrapper(conf[pathfs[path]].flowname, path);
         }
-    } else if(CTX->use_registry()){
+    } else if(CTX->use_workflow()){
         pathfs[path] = CTX->local_fs_id();
         wrappered_path = wrapper(conf[CTX->local_fs_id()].flowname, path);
     } else {
         wrappered_path = path;
     }
-    if(CTX->use_registry())
+    if(CTX->use_workflow())
         wrapper_pathfs[wrappered_path] = pathfs[path];
 }
 

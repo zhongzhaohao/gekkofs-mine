@@ -176,8 +176,7 @@ load_hostfile(const std::string& path) {
     }
     /* --Multiple GekkoFS-- 
     *  Protocol is extracted in Registry Connection */
-    if(!CTX->use_registry())
-        extract_protocol(hosts[0].second);
+    extract_protocol(hosts[0].second);
     // sort hosts so that data always hashes to the same place during restart
     //std::sort(hosts.begin(), hosts.end());
     // remove rootdir suffix from host after sorting as no longer required
@@ -366,98 +365,12 @@ load_forwarding_map() {
 
 /**
  * --Mulitple GekkoFS--
- * Read environment variables
- * @param workflow 
- * @param hostfile 
- * @param hostconfigfile
- */
-void read_env(string &workflow,string &hostfile,string &hostconfigfile){
-    hostfile = gkfs::env::get_var(gkfs::env::HOSTS_FILE,
-                                  gkfs::config::hostfile_path);  
-    hostconfigfile = gkfs::env::get_var(gkfs::env::HOSTS_CONFIG_FILE,
-                                  gkfs::config::hostfile_config_path);
-    workflow = gkfs::env::get_var(gkfs::env::WORK_FLOW,
-                                  "default_job");//todo default name of work flow
-    auto mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
-                            "");
-    CTX->workflow(workflow);
-    CTX->mergeflows(mergeflows);
-}
-
-/**
- * --Mulitple GekkoFS--
- * Set CTX vars according to environment variables at init_envrionment beginning.
- */
-void Set_ctx_vars(){
-    string use_registry = gkfs::env::get_var(gkfs::env::REGISTRY,
-                                  gkfs::config::use_registry);  
-    std::transform(use_registry.begin(), use_registry.end(), use_registry.begin(), ::tolower);
-    if(use_registry == "on") CTX->use_registry(true);
-    else CTX->use_registry(false);
-}
-
-/**
- * --Mulitple GekkoFS--
- * Check whether making merge request to Registry
- * @param mergeflows flows to merge
- * @param hostfile  hostfile to generate
- * @param hostconfigfile hostconfigfile to generate
- * @return bool
- */
-bool CheckMerge(string &mergeflows,string &hostfile,string &hostconfigfile) {
-
-    auto merge = gkfs::env::get_var(gkfs::env::MERGE,
-                                  gkfs::config::merge_default);
-    mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
-                                  "");
-
-    bool hfexist = !access(hostfile.c_str(), F_OK);
-    bool hcexist = !access(hostconfigfile.c_str(), F_OK);
-    std::transform(merge.begin(), merge.end(), merge.begin(), ::tolower);
-    if(merge == "on"){
-        if(hfexist && hcexist) return false;
-        if(!hfexist && !hcexist) {
-            if(!mergeflows.length())
-                throw runtime_error("Trying to merge empty workflows");
-            return true;
-        }else{
-            throw runtime_error("Please make sure hostfile or hostconfigfile not existing before first merge");
-        }
-    }
-    return false;
-}
-
-/**
- * --Mulitple GekkoFS--
- * Get Registry Address
- * Set rpc protocol
- * @return string
- */
-string
-read_registry_file() {
-    string registryfile;
-    registryfile = gkfs::env::get_var(gkfs::env::REGISTRY_FILE,
-                                  gkfs::config::registryfile_path);
-    
-    ifstream lf(registryfile);
-    string addr;
-    getline(lf, addr);
-    if(addr.empty()) {
-        throw runtime_error(fmt::format("Registryfile empty: '{}'", registryfile));
-    }
-    extract_protocol(addr);
-    LOG(INFO, "Getting registry addr: {}",addr);
-    return addr;
-}
-
-/**
- * --Mulitple GekkoFS--
  * Get HostSize(number of daemon) and FsPriority of Each GekkoFS
  */
 void 
 read_hosts_config_file(std::vector<fs_info>& hostconfig, 
                        unsigned int all_hosts) {
-    if(!CTX->use_registry()){
+    if(!CTX->use_workflow()){
         std::vector<uint32_t> lines(all_hosts);
         std::iota(lines.begin(), lines.end(), 0);
         fs_info fs_conf = {"default_job", lines, 0};
@@ -561,29 +474,10 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
         LOG(WARNING, "Failed to find local host. Using host '0' as local host");
         CTX->local_host_id(0);
     }
-    // unsigned int max_fs_size = 0, max_fs_id = 0;
-    // for(unsigned int fs = 0;fs < CTX->hostsconfig().size(); fs++){
-    //     auto size = CTX->hostsconfig()[fs].fs_size_seq.size();
-    //     if(size > max_fs_size){
-    //         max_fs_id = fs;
-    //         max_fs_size = size;
-    //     }
-    // }
+
     CTX->local_fs_id(0);
     CTX->hosts(addrs);
     CTX->hosts_name(hosts_name);
-}
-
-/**
- * --Multiple GekkoFS--
- * Connect to registry --- lookup Mercury URI addresses via Hermes
- * @param addr Registry Address
- */
-void
-connect_to_registry(std::string addr) {
-    hermes::endpoint endp = lookup_endpoint(addr);
-    LOG(DEBUG, "Found registry: {}", endp.to_string());
-    CTX->registry(endp);
 }
 
 } // namespace gkfs::utils

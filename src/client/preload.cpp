@@ -29,6 +29,7 @@
 
 #include <client/preload.hpp>
 #include <client/path.hpp>
+#include <client/env.hpp>
 #include <client/logging.hpp>
 #include <client/rpc/forward_management.hpp>
 #include <client/preload_util.hpp>
@@ -36,6 +37,7 @@
 #include <client/open_file_map.hpp> /* --FGAP-- */
 #include <common/rpc/distributor.hpp>
 #include <common/common_defs.hpp>
+#include <common/env_util.hpp>
 
 #include <ctime>
 #include <cstdlib>
@@ -70,6 +72,21 @@ exit_error_msg(int errcode, const string& msg) {
     gkfs::preload::stop_interception();
     CTX->disable_interception();
     ::exit(errcode);
+}
+
+void
+load_workflow_mode() {
+    string use_workflow = gkfs::env::get_var(gkfs::env::USE_WORKFLOW,
+                                             gkfs::config::use_workflow);
+    std::transform(use_workflow.begin(), use_workflow.end(),
+                   use_workflow.begin(), ::tolower);
+    auto workflow = gkfs::env::get_var(gkfs::env::WORK_FLOW,
+                                  "default_job");//todo default name of work flow
+    auto mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
+                            "");
+    CTX->use_workflow(use_workflow == "on");
+    CTX->workflow(workflow);
+    CTX->mergeflows(mergeflows);
 }
 
 /**
@@ -175,62 +192,12 @@ log_prog_name() {
 
 namespace gkfs::preload {
 /**
- * --Multiple GekkoFS--
- * This function is only called in init_envrionment before reading hostfile and hostconfigfile 
- * Request Registry to auto generate hostfile and hostconfigfile if in need
- */
-int request_registry(){
-    string mergeflows,hostfile,hostconfigfile,workflow;
-    gkfs::utils::read_env(workflow,hostfile,hostconfigfile);
-    if(!gkfs::utils::CheckMerge(mergeflows,hostfile,hostconfigfile))
-        return 0;
-    auto err = gkfs::rpc::forward_request_registry(mergeflows,hostconfigfile,hostfile,workflow);
-    if(err) {
-        errno = err;
-        return -1;
-    }
-    std::cout<< "request succeed:"<< std::endl;
-    return 0;
-}
-
-/**
  * This function is only called in the preload constructor and initializes
  * the file system client
  */
 void
 init_environment() {
-    /* --Multiple GekkoFS-- 
-    * Load registry address
-    * Initialize RPC
-    * Connect to Registry
-    * Request merge to Registry
-    * Load host(daemon) addresses
-    * Load Each GekkoFS Config
-    * Connect to hosts(daemons) */
-    gkfs::utils::Set_ctx_vars();
-    if(CTX->use_registry()){
-        string registry_addr = "";
-        try {
-            LOG(INFO, "Loading registry address...");
-            registry_addr = gkfs::utils::read_registry_file();
-        } catch(const std::exception& e) {
-            exit_error_msg(EXIT_FAILURE,
-                        "Failed to load hosts addresses: "s + e.what());
-        }   
-        // initialize Hermes interface to Mercury
-        LOG(INFO, "Initializing RPC subsystem...");
-        if(!init_hermes_client()) { 
-            exit_error_msg(EXIT_FAILURE, "Unable to initialize RPC subsystem");
-        }
-        try {
-            gkfs::utils::connect_to_registry(registry_addr);// find hosts addr and save them to ctx
-        } catch(const std::exception& e) {
-            exit_error_msg(EXIT_FAILURE,
-                        "Failed to connect to hosts: "s + e.what());
-        }
-        // make merge request to Registry
-        request_registry();
-    }
+    load_workflow_mode();
 
     /* --FGAP-- */
     CTX->file_tagmap()->get_tags_by_env();
@@ -257,20 +224,18 @@ init_environment() {
         exit_error_msg(EXIT_FAILURE,
                        "Failed to load system config: "s + e.what());
     }
-
     CTX->hostsconfig(hosts_config);
 
-    if(CTX->use_registry()){
+    if(CTX->use_workflow()){
         CTX->init_threadpool(hosts_config.size());
     }
 
-    if(!CTX->use_registry()){
-        // initialize Hermes interface to Mercury
-        LOG(INFO, "Initializing RPC subsystem...");
-        if(!init_hermes_client()) { 
-            exit_error_msg(EXIT_FAILURE, "Unable to initialize RPC subsystem");
-        }
+    // initialize Hermes interface to Mercury
+    LOG(INFO, "Initializing RPC subsystem...");
+    if(!init_hermes_client()) { 
+        exit_error_msg(EXIT_FAILURE, "Unable to initialize RPC subsystem");
     }
+
 
     try {
         gkfs::utils::connect_to_hosts(hosts);//find hosts addr and save them to ctx
@@ -315,7 +280,7 @@ init_environment() {
                 "Unable to fetch file system configurations from daemon process through RPC.");
     }
 
-    if(CTX->use_registry()) {
+    if(CTX->use_workflow()) {
         bloom_parameters parameters;
         parameters.projected_element_count = gkfs::config::rpc::bloom_size;
         parameters.false_positive_probability = gkfs::config::rpc::bloom_ratio;
@@ -338,22 +303,6 @@ init_environment() {
     LOG(INFO, "Environment initialization successful.");
 }
 
-/**
- * --Multiple GekkoFS--
- * This function is only called at preload library destruction
- * Register current work flow to Registry
- */
-int register_registry(){    
-    string workflow,hostfile,hostconfigfile;
-    gkfs::utils::read_env(workflow,hostfile,hostconfigfile);
-    //making register request to registry
-    auto err = gkfs::rpc::forward_register_registry(workflow,hostconfigfile,hostfile);
-    if(err) {
-        errno = err;
-        return -1;
-    }
-    return 0;
-}
 
 } // namespace gkfs::preload
 
@@ -416,10 +365,6 @@ destroy_preload() {
 
     CTX->clear_hosts();
     LOG(DEBUG, "Peer information deleted");
-    //register work flow to registry
-    if(CTX->use_registry())
-        gkfs::preload::register_registry();/*--Multiple GekkoFS--*/
-
     ld_network_service.reset();
     LOG(DEBUG, "RPC subsystem shut down");
 
