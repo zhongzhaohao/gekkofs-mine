@@ -31,6 +31,9 @@
 
 #include <daemon/daemon.hpp>
 #include <common/bloom_filter.hpp>
+#include <common/common_defs.hpp>
+#include <common/file_layout.hpp>
+#include <cstdint>
 #include <unordered_map>
 #include <map>
 #include <functional> //std::hash
@@ -106,6 +109,14 @@ private:
 
     // Prometheus
     std::string prometheus_gateway_ = gkfs::config::stats::prometheus_gateway;
+
+    // malleability
+    std::uint64_t epoch_ = 0;
+    gkfs::rpc::daemon_resize_action resize_action_ =
+            gkfs::rpc::daemon_resize_action::unknown;
+    std::string resize_hostfile_{};
+    std::string resize_unique_id_{};
+    gkfs::file_layout::FileLayoutMap file_layouts_;
 
 public:
     static FsData*
@@ -288,6 +299,33 @@ public:
 
     void
     prometheus_gateway(const std::string& prometheus_gateway_);
+
+    std::uint64_t
+    epoch() const;
+
+    void
+    epoch(std::uint64_t epoch);
+
+    gkfs::rpc::daemon_resize_action
+    resize_action() const;
+
+    void
+    resize_action(gkfs::rpc::daemon_resize_action action);
+
+    const std::string&
+    resize_hostfile() const;
+
+    void
+    resize_hostfile(std::string hostfile);
+
+    const std::string&
+    resize_unique_id() const;
+
+    void
+    resize_unique_id(std::string unique_id);
+
+    gkfs::file_layout::FileLayoutMap&
+    file_layouts();
 };
 
 

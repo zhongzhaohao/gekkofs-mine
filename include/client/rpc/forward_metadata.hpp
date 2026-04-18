@@ -31,7 +31,9 @@
 #define GEKKOFS_CLIENT_FORWARD_METADATA_HPP
 
 #include <string>
+#include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 /* Forward declaration */
 namespace gkfs {
@@ -53,7 +55,7 @@ int
 forward_create(const std::string& path, mode_t mode, const int copy);
 
 int
-forward_stat(const std::string& path, std::string& attr, const int copy);
+forward_stat(const std::string& path, std::string& attr, const int copy, bool update_layout = false);
 
 #ifdef HAS_RENAME
 int

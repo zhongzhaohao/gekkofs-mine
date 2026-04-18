@@ -180,6 +180,17 @@ OpenFileMap::remove(const int fd) {
     return true;
 }
 
+bool
+OpenFileMap::path_open(const std::string& path, FileType type) {
+    lock_guard<recursive_mutex> lock(files_mutex_);
+    for(const auto& open_file : files_) {
+        if(open_file.second->type() == type && open_file.second->path() == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int
 OpenFileMap::dup(const int oldfd) {
     lock_guard<recursive_mutex> lock(files_mutex_);

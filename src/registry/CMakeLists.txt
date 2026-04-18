@@ -36,8 +36,10 @@ add_executable(gkfs_registry)
 target_sources(
   gkfs_registry
   PRIVATE server.cpp
+          mallea_scheduler.cpp
           rpc/serve.cpp
           rpc/forward.cpp
+          rpc/registration.cpp
           utils.cpp
   PUBLIC ${CMAKE_SOURCE_DIR}/include/config.hpp
          ${CMAKE_SOURCE_DIR}/include/version.hpp.in

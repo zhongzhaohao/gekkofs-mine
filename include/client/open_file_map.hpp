@@ -142,6 +142,9 @@ public:
     bool
     remove(int fd);
 
+    bool
+    path_open(const std::string& path, FileType type);
+
     int
     dup(int oldfd);
 

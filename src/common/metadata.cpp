@@ -38,6 +38,7 @@ extern "C" {
 
 #include <ctime>
 #include <cassert>
+#include <cctype>
 #include <random>
 
 namespace gkfs::metadata {
@@ -83,7 +84,7 @@ Metadata::init_time() {
 }
 
 Metadata::Metadata(const mode_t mode)
-    : mode_(mode), link_count_(0), size_(0), blocks_(0) {
+    : mode_(mode), link_count_(0), size_(0), blocks_(0), epoch_(0) {
     assert(S_ISDIR(mode_) || S_ISREG(mode_));
     init_time();
 }
@@ -92,7 +93,7 @@ Metadata::Metadata(const mode_t mode)
 
 Metadata::Metadata(const mode_t mode, const std::string& target_path)
     : mode_(mode), link_count_(0), size_(0), blocks_(0),
-      target_path_(target_path) {
+      epoch_(0), target_path_(target_path) {
     assert(S_ISLNK(mode_) || S_ISDIR(mode_) || S_ISREG(mode_));
     // target_path should be there only if this is a link
     assert(target_path_.empty() || S_ISLNK(mode_));
@@ -119,6 +120,16 @@ Metadata::Metadata(const std::string& binary_str) {
     size_ = std::stol(++ptr, &read);
     assert(read > 0);
     ptr += read;
+
+    if constexpr(gkfs::config::use_malleability) {
+        assert(*ptr == MSP || *ptr == '\0');
+        if(*ptr == MSP &&
+           std::isdigit(static_cast<unsigned char>(*(ptr + 1)))) {
+            epoch_ = static_cast<std::uint64_t>(std::stoull(++ptr, &read));
+            assert(read > 0);
+            ptr += read;
+        }
+    }
 
     // The order is important. don't change.
     if constexpr(gkfs::config::metadata::use_atime) {
@@ -185,6 +196,10 @@ Metadata::serialize() const {
     s += fmt::format_int(mode_).c_str(); // add mandatory mode
     s += MSP;
     s += fmt::format_int(size_).c_str(); // add mandatory size
+    if constexpr(gkfs::config::use_malleability) {
+        s += MSP;
+        s += fmt::format_int(epoch_).c_str();
+    }
     if constexpr(gkfs::config::metadata::use_atime) {
         s += MSP;
         s += fmt::format_int(atime_).c_str();
@@ -300,6 +315,21 @@ Metadata::blocks() const {
 void
 Metadata::blocks(blkcnt_t blocks) {
     Metadata::blocks_ = blocks;
+}
+
+std::uint64_t
+Metadata::epoch() const {
+    if constexpr(gkfs::config::use_malleability) {
+        return epoch_;
+    }
+    return 0;
+}
+
+void
+Metadata::epoch(std::uint64_t epoch) {
+    if constexpr(gkfs::config::use_malleability) {
+        Metadata::epoch_ = epoch;
+    }
 }
 
 #ifdef HAS_SYMLINKS

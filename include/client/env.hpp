@@ -52,6 +52,7 @@ static constexpr auto HOSTS_FILE = ADD_PREFIX("HOSTS_FILE");
 /* --Multiple GekkoFS-- */
 static constexpr auto WORK_FLOW = ADD_PREFIX("WORK_FLOW");
 static constexpr auto USE_WORKFLOW = ADD_PREFIX("USE_WORKFLOW");
+static constexpr auto UNIQUE_ID = ADD_PREFIX("UNIQUE_ID");
 static constexpr auto MERGE_FLOWS = ADD_PREFIX("MERGE_FLOWS");
 static constexpr auto REGISTRY_FILE = ADD_PREFIX("REGISTRY_FILE");
 static constexpr auto HOSTS_CONFIG_FILE = ADD_PREFIX("HOSTS_CONFIG_FILE");

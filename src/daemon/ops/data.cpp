@@ -68,6 +68,7 @@ ChunkTruncateOperation::truncate_abt(void* _arg) {
     // Unpack args
     auto* arg = static_cast<struct chunk_truncate_args*>(_arg);
     const string& path = *(arg->path);
+    const string& unique_id = *(arg->unique_id);
     const size_t size = arg->size;
     int err_response = 0;
     try {
@@ -77,10 +78,10 @@ ChunkTruncateOperation::truncate_abt(void* _arg) {
         auto left_pad = block_overrun(size, gkfs::config::rpc::chunksize);
         if(left_pad != 0) {
             GKFS_DATA->storage()->truncate_chunk_file(path, chunk_id_start,
-                                                      left_pad);
+                                                      unique_id, left_pad);
             chunk_id_start++;
         }
-        GKFS_DATA->storage()->trim_chunk_space(path, chunk_id_start);
+        GKFS_DATA->storage()->trim_chunk_space(path, chunk_id_start, unique_id);
     } catch(const ChunkStorageException& err) {
         GKFS_DATA->spdlogger()->error("{}() {}", __func__, err.what());
         err_response = err.code().value();
@@ -98,8 +99,9 @@ ChunkTruncateOperation::clear_task_args() {
     task_arg_ = {};
 }
 
-ChunkTruncateOperation::ChunkTruncateOperation(const string& path)
-    : ChunkOperation{path, 1} {}
+ChunkTruncateOperation::ChunkTruncateOperation(const string& path,
+                                               const string& unique_id)
+    : ChunkOperation{path, unique_id, 1} {}
 
 /**
  * @internal
@@ -125,6 +127,7 @@ ChunkTruncateOperation::truncate(size_t size) {
 
     auto& task_arg = task_arg_;
     task_arg.path = &path_;
+    task_arg.unique_id = &unique_id_;
     task_arg.size = size;
     task_arg.eventual = task_eventuals_[0];
 
@@ -187,9 +190,11 @@ ChunkWriteOperation::write_file_abt(void* _arg) {
     // Unpack args
     auto* arg = static_cast<struct chunk_write_args*>(_arg);
     const string& path = *(arg->path);
+    const string& unique_id = *(arg->unique_id);
     ssize_t wrote{0};
     try {
-        wrote = GKFS_DATA->storage()->write_chunk(path, arg->chnk_id, arg->buf,
+        wrote = GKFS_DATA->storage()->write_chunk(path, arg->chnk_id,
+                                                  unique_id, arg->buf,
                                                   arg->size, arg->off);
     } catch(const ChunkStorageException& err) {
         GKFS_DATA->spdlogger()->error("{}() {}", __func__, err.what());
@@ -208,8 +213,9 @@ ChunkWriteOperation::clear_task_args() {
     task_args_.clear();
 }
 
-ChunkWriteOperation::ChunkWriteOperation(const string& path, size_t n)
-    : ChunkOperation{path, n} {
+ChunkWriteOperation::ChunkWriteOperation(const string& path,
+                                         const string& unique_id, size_t n)
+    : ChunkOperation{path, unique_id, n} {
     task_args_.resize(n);
 }
 
@@ -241,6 +247,7 @@ ChunkWriteOperation::write_nonblock(size_t idx, const uint64_t chunk_id,
 
     auto& task_arg = task_args_[idx];
     task_arg.path = &path_;
+    task_arg.unique_id = &unique_id_;
     task_arg.buf = bulk_buf_ptr;
     task_arg.chnk_id = chunk_id;
     task_arg.size = size;
@@ -322,12 +329,13 @@ ChunkReadOperation::read_file_abt(void* _arg) {
     // unpack args
     auto* arg = static_cast<struct chunk_read_args*>(_arg);
     const string& path = *(arg->path);
+    const string& unique_id = *(arg->unique_id);
     ssize_t read = 0;
     try {
         // Under expected circumstances (error or no error) read_chunk will
         // signal the eventual
-        read = GKFS_DATA->storage()->read_chunk(path, arg->chnk_id, arg->buf,
-                                                arg->size, arg->off);
+        read = GKFS_DATA->storage()->read_chunk(path, arg->chnk_id, unique_id,
+                                                arg->buf, arg->size, arg->off);
     } catch(const ChunkStorageException& err) {
         GKFS_DATA->spdlogger()->error("{}() {}", __func__, err.what());
         read = -(err.code().value());
@@ -345,8 +353,9 @@ ChunkReadOperation::clear_task_args() {
     task_args_.clear();
 }
 
-ChunkReadOperation::ChunkReadOperation(const string& path, size_t n)
-    : ChunkOperation{path, n} {
+ChunkReadOperation::ChunkReadOperation(const string& path,
+                                       const string& unique_id, size_t n)
+    : ChunkOperation{path, unique_id, n} {
     task_args_.resize(n);
 }
 
@@ -377,6 +386,7 @@ ChunkReadOperation::read_nonblock(size_t idx, const uint64_t chunk_id,
 
     auto& task_arg = task_args_[idx];
     task_arg.path = &path_;
+    task_arg.unique_id = &unique_id_;
     task_arg.buf = bulk_buf_ptr;
     task_arg.chnk_id = chunk_id;
     task_arg.size = size;
@@ -426,11 +436,6 @@ ChunkReadOperation::wait_for_tasks_and_push_back(const bulk_args& args) {
         }
         assert(task_size != nullptr);
         if(*task_size < 0) {
-            // sparse regions do not have chunk files and are therefore skipped
-            if(-(*task_size) == ENOENT) {
-                ABT_eventual_free(&task_eventuals_[idx]);
-                continue;
-            }
             io_err = -(*task_size); // make error code > 0
         } else if(*task_size == 0) {
             // read size of 0 is not an error and can happen because reading the

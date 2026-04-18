@@ -39,6 +39,7 @@
 #include <set>
 #include <common/arithmetic/arithmetic.hpp>
 #include <common/fs_info.hpp>
+#include <cstdint>
 
 namespace gkfs::rpc {
 
@@ -61,7 +62,7 @@ public:
 
     virtual host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                const int num_copy) const = 0;
+                const int num_copy, const int size = 0) const = 0;
     // TODO: We need to pass hosts_size in the server side, because the number
     // of servers are not defined (in startup)
 
@@ -70,7 +71,7 @@ public:
 
     virtual host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                unsigned int hosts_size, const int num_copy) = 0;
+                unsigned int hosts_size, const int num_copy, const int size = 0) = 0;
 
     virtual host_t
     locate_file_metadata(const std::string& path, const int num_copy) const = 0;
@@ -95,12 +96,12 @@ private:
 public:
     SimpleHashDistributor();
 
-    SimpleHashDistributor(host_t localhost, std::vector<fs_info> fs_infos, 
+    SimpleHashDistributor(host_t localhost, std::vector<fs_info> fs_infos,
                         std::map<std::string, unsigned int> * pathfs, host_t localfs);
 
     unsigned int
     hosts_size() const override;
-    
+
     host_t
     locate_fs(const std::string& path) const override;
 
@@ -109,22 +110,72 @@ public:
 
     host_t
     locate(const std::string& path, unsigned int hostnum, const int num_copy) const override;
-    
+
     host_t
     localhost() const override;
 
     host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                const int num_copy) const override;
+                const int num_copy, const int size = 0) const override;
 
     host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                unsigned int host_size, const int num_copy);
+                unsigned int host_size, const int num_copy,
+                const int size = 0) override;
 
     host_t
     locate_file_metadata(const std::string& path,
                          const int num_copy) const override;
-    
+
+    host_t
+    locate_file_metadata_fs(const std::string& path,
+                        const int num_copy, const int fs) const override;
+
+    std::vector<host_t>
+    locate_directory_metadata(const std::string& path) const override;
+};
+
+class ConsistencyHashDistributor : public Distributor {
+private:
+    std::vector<host_t> all_hosts_;
+    host_t hosts_size_;
+
+    static host_t
+    jump_consistent_hash(std::uint64_t key, std::int32_t buckets);
+
+public:
+    ConsistencyHashDistributor();
+
+    explicit ConsistencyHashDistributor(unsigned int hosts_size);
+
+    unsigned int
+    hosts_size() const override;
+
+    host_t
+    locate_fs(const std::string& path) const override;
+
+    std::set<host_t>
+    locate_host_set(const std::string& path, const uint64_t size, const int num_copy) const override;
+
+    host_t
+    locate(const std::string& path, unsigned int hostnum, const int num_copy) const override;
+
+    host_t
+    localhost() const override;
+
+    host_t
+    locate_data(const std::string& path, const chunkid_t& chnk_id,
+                const int num_copy, const int size = 0) const override;
+
+    host_t
+    locate_data(const std::string& path, const chunkid_t& chnk_id,
+                unsigned int host_size, const int num_copy,
+                const int size = 0) override;
+
+    host_t
+    locate_file_metadata(const std::string& path,
+                         const int num_copy) const override;
+
     host_t
     locate_file_metadata_fs(const std::string& path,
                         const int num_copy, const int fs) const override;
@@ -149,7 +200,7 @@ public:
 
     host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                const int num_copy) const override;
+                const int num_copy, const int size = 0) const override;
 
     host_t
     locate_file_metadata(const std::string& path,
@@ -177,11 +228,11 @@ public:
 
     host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                const int num_copy) const override final;
+                const int num_copy, const int size = 0) const override final;
 
     host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                unsigned int host_size, const int num_copy) override final;
+                unsigned int host_size, const int num_copy, const int size = 0) override final;
 
     host_t
     locate_file_metadata(const std::string& path,
@@ -230,11 +281,11 @@ public:
 
     host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                const int num_copy) const override;
+                const int num_copy, const int size = 0) const override;
 
     host_t
     locate_data(const std::string& path, const chunkid_t& chnk_id,
-                unsigned int host_size, const int num_copy);
+                unsigned int host_size, const int num_copy, const int size = 0);
 
     host_t
     locate_file_metadata(const std::string& path,

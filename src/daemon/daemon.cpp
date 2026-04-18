@@ -141,9 +141,9 @@ register_server_rpcs(margo_instance_id mid) {
                    rpc_srv_get_fs_config);
     MARGO_REGISTER(mid, gkfs::rpc::tag::bloom_filter, rpc_bloom_filter_in_t, rpc_bloom_filter_out_t,
                     rpc_srv_get_bloom_filter);
-    MARGO_REGISTER(mid, gkfs::rpc::tag::create, rpc_mk_node_in_t, rpc_err_out_t,
-                   rpc_srv_create);
-    MARGO_REGISTER(mid, gkfs::rpc::tag::stat, rpc_path_only_in_t,
+    MARGO_REGISTER(mid, gkfs::rpc::tag::create, rpc_mk_node_in_t,
+                   rpc_mk_node_out_t, rpc_srv_create);
+    MARGO_REGISTER(mid, gkfs::rpc::tag::stat, rpc_stat_in_t,
                    rpc_stat_out_t, rpc_srv_stat);
     MARGO_REGISTER(mid, gkfs::rpc::tag::decr_size, rpc_trunc_in_t,
                    rpc_err_out_t, rpc_srv_decr_size);
@@ -181,6 +181,9 @@ register_server_rpcs(margo_instance_id mid) {
                    rpc_err_out_t, rpc_srv_stage);
     MARGO_REGISTER(mid, gkfs::rpc::tag::stage_metadata, rpc_stage_metadata_in_t,
                    rpc_stage_metadata_out_t, rpc_srv_stage_metadata);
+    MARGO_REGISTER(mid, gkfs::rpc::tag::daemon_update_epoch,
+                   rpc_daemon_update_epoch_in_t, rpc_err_out_t,
+                   rpc_srv_daemon_update_epoch);
 }
 
 /**
@@ -355,6 +358,7 @@ init_environment() {
     GKFS_DATA->blocks_state(gkfs::config::metadata::use_blocks);
     // Create metadentry for root directory
     gkfs::metadata::Metadata root_md{S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO};
+    root_md.epoch(GKFS_DATA->epoch());
     try {
         gkfs::metadata::create("/", root_md);
     } catch(const gkfs::metadata::ExistsException& e) {
@@ -370,18 +374,20 @@ init_environment() {
     GKFS_DATA->spdlogger()->info("Startup successful. Daemon is ready.");
     GKFS_DATA->is_initialized(false);
 
-    // Initialize bloom
-    bloom_parameters parameters;
-    // How many elements roughly do we expect to insert?
-    parameters.projected_element_count = gkfs::config::rpc::bloom_size;
-    // Maximum tolerable false positive probability? (0,1)
-    parameters.false_positive_probability = gkfs::config::rpc::bloom_ratio;
-    parameters.compute_optimal_parameters();
-    //Instantiate Bloom Filter
-    bloom_filter filter(parameters);
-    std::string root = "/";
-    filter.insert(root);
-    GKFS_DATA->Bloom_filter(filter);
+    if constexpr(gkfs::config::use_bloom) {
+        // Initialize bloom
+        bloom_parameters parameters;
+        // How many elements roughly do we expect to insert?
+        parameters.projected_element_count = gkfs::config::rpc::bloom_size;
+        // Maximum tolerable false positive probability? (0,1)
+        parameters.false_positive_probability = gkfs::config::rpc::bloom_ratio;
+        parameters.compute_optimal_parameters();
+        //Instantiate Bloom Filter
+        bloom_filter filter(parameters);
+        std::string root = "/";
+        filter.insert(root);
+        GKFS_DATA->Bloom_filter(filter);
+    }
 }
 
 #ifdef GKFS_ENABLE_AGIOS

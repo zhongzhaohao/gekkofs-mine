@@ -38,12 +38,146 @@
 
 #include <unordered_set>
 #include <iostream>
+#include <tuple>
 
 using namespace std;
 
 namespace gkfs::rpc {
 namespace cfg = gkfs::config::rpc;
 using gkfs::utils::arithmetic::last_smaller_equal;
+
+namespace {
+
+struct EpochTarget {
+    gkfs::file_layout::epoch_t epoch{};
+    uint64_t target{};
+};
+
+struct EpochChunkRange {
+    gkfs::file_layout::epoch_t epoch{};
+    uint64_t chunk_start{};
+    uint64_t chunk_end{};
+    uint64_t host_size{};
+};
+
+bool
+operator<(const EpochTarget& lhs, const EpochTarget& rhs) {
+    return std::tie(lhs.epoch, lhs.target) < std::tie(rhs.epoch, rhs.target);
+}
+
+bool
+operator==(const EpochTarget& lhs, const EpochTarget& rhs) {
+    return lhs.epoch == rhs.epoch && lhs.target == rhs.target;
+}
+
+gkfs::file_layout::FileLayoutSnapshotPtr
+load_layout_snapshot_for_path(const std::string& path) {
+    auto& layouts = CTX->file_layouts();
+    auto it = layouts.find(path);
+    if(it == layouts.end() && CTX->use_workflow()) {
+        for(const auto& host_config : CTX->hostsconfig()) {
+            const auto prefix = "/" + host_config.flowname;
+            if(path == prefix) {
+                it = layouts.find("/");
+                break;
+            }
+            if(path.rfind(prefix + "/", 0) == 0) {
+                it = layouts.find(path.substr(prefix.size()));
+                break;
+            }
+        }
+    }
+
+    if(it == layouts.end()) {
+        return {};
+    }
+
+    return gkfs::file_layout::load_file_layout_snapshot(it->second);
+}
+
+gkfs::file_layout::epoch_t
+snapshot_latest_version_epoch(
+        const gkfs::file_layout::FileLayoutSnapshotPtr& snapshot) {
+    if(!snapshot) {
+        return 0;
+    }
+    return snapshot->latest_version_epoch;
+}
+
+std::vector<EpochChunkRange>
+split_chunk_range_by_epoch(
+        const gkfs::file_layout::FileLayoutSnapshotPtr& snapshot,
+        uint64_t chunk_start, uint64_t chunk_end,
+        gkfs::file_layout::epoch_t fallback_epoch) {
+    std::vector<EpochChunkRange> ranges;
+    if(chunk_start > chunk_end) {
+        return ranges;
+    }
+
+    if(!snapshot || snapshot->empty()) {
+        gkfs::utils::ensure_epoch_hosts(fallback_epoch);
+        ranges.push_back({fallback_epoch,
+                          chunk_start,
+                          chunk_end,
+                          CTX->epoch_hosts_size(fallback_epoch)});
+        return ranges;
+    }
+
+    const auto& entries = snapshot->layout.entries;
+    auto it = std::upper_bound(
+            entries.begin(), entries.end(), chunk_start,
+            [](uint64_t id, const gkfs::file_layout::FileLayoutEntry& entry) {
+                return id < entry.start_chunk;
+            });
+
+    auto entry_idx = static_cast<std::size_t>(std::distance(entries.begin(), it));
+    if(entry_idx != 0) {
+        --entry_idx;
+    }
+
+    auto segment_start = chunk_start;
+    while(segment_start <= chunk_end) {
+        const auto epoch = entries[entry_idx].epoch;
+        uint64_t next_segment_start = chunk_end + 1;
+        if(entry_idx + 1 < entries.size()) {
+            next_segment_start = entries[entry_idx + 1].start_chunk;
+        }
+
+        const auto segment_end =
+                std::min(chunk_end, next_segment_start - 1);
+        gkfs::utils::ensure_epoch_hosts(epoch);
+        ranges.push_back(
+                {epoch, segment_start, segment_end, CTX->epoch_hosts_size(epoch)});
+
+        if(segment_end == chunk_end) {
+            break;
+        }
+
+        segment_start = segment_end + 1;
+        ++entry_idx;
+    }
+
+    return ranges;
+}
+
+EpochTarget
+locate_epoch_target(const std::string& path, uint64_t chunk_id, int copy,
+                    gkfs::file_layout::epoch_t epoch, uint64_t host_size) {
+    const auto& distributor = *CTX->distributor();
+    const auto target = distributor.locate_data(
+            path, static_cast<gkfs::rpc::chunkid_t>(chunk_id), copy,
+            static_cast<int>(host_size));
+    return {epoch, target};
+}
+
+uint64_t
+global_host_id(const EpochTarget& target) {
+    gkfs::utils::ensure_epoch_hosts(target.epoch);
+    return CTX->epoch_host(target.epoch, target.target);
+}
+
+} // namespace
+
 /*
  * This file includes all data RPC calls.
  * NOTE: No errno is defined here!
@@ -64,11 +198,17 @@ using gkfs::utils::arithmetic::last_smaller_equal;
  */
 pair<int, ssize_t>
 forward_write(const string& path, const void* buf, const off64_t offset,
-              const size_t write_size, const int8_t num_copies) {
+              const size_t write_size, const int8_t num_copies,
+              std::uint64_t latest_version_epoch) {
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
 
     assert(write_size > 0);
+    const auto file_layout_snapshot = load_layout_snapshot_for_path(path);
+    const auto file_latest_version_epoch =
+            latest_version_epoch
+                    ? latest_version_epoch
+                    : snapshot_latest_version_epoch(file_layout_snapshot);
 
     // Calculate chunkid boundaries and numbers so that daemons know in
     // which interval to look for chunks
@@ -77,62 +217,72 @@ forward_write(const string& path, const void* buf, const off64_t offset,
                                 gkfs::config::rpc::chunksize);
 
     auto chnk_total = (chnk_end - chnk_start) + 1;
+    const auto epoch_ranges = split_chunk_range_by_epoch(
+            file_layout_snapshot, chnk_start, chnk_end,
+            file_latest_version_epoch);
     /* --PFL implementation-- */
     //component number of first chunk
     auto cpn = last_smaller_equal(cfg::PFLchunkID, chnk_start);
     //help to calculate total chunk size of target
-    std::map<uint64_t, uint64_t> target_total_size{};
+    std::map<EpochTarget, uint64_t> target_total_size{};
     /* --PFL implementation-- */
     // Collect all chunk ids within count that have the same destination so
     // that those are send in one rpc bulk transfer
-    std::map<uint64_t, std::vector<uint64_t>> target_chnks{};
+    std::map<EpochTarget, std::vector<uint64_t>> target_chnks{};
     
     // contains the target ids, used to access the target_chnks map.
     // First idx is chunk with potential offset
-    std::vector<uint64_t> targets{};
+    std::vector<EpochTarget> targets{};
 
     // targets for the first and last chunk as they need special treatment
     // We need a set to manage replicas.
-    std::set<uint64_t> chnk_start_target{};
-    std::set<uint64_t> chnk_end_target{};
+    std::set<EpochTarget> chnk_start_target{};
+    std::set<EpochTarget> chnk_end_target{};
 
-    std::unordered_map<uint64_t, std::vector<uint8_t>> write_ops_vect;
+    std::map<EpochTarget, std::vector<uint8_t>> write_ops_vect;
 
     // If num_copies is 0, we do the normal write operation. Otherwise
     // we process all the replicas.
-    for(uint64_t chnk_id = chnk_start; chnk_id <= chnk_end; chnk_id++) {
-        // /* --PFL implementation-- */
-        //track component number of current chunk
-        if(cpn + 1 < cfg::PFLcomponents 
-            && chnk_id >= cfg::PFLchunkID[cpn + 1]) cpn++;
-        for(auto copy = num_copies ? 1 : 0; copy < num_copies + 1; copy++) {
-            auto target = CTX->distributor()->locate_data(path, chnk_id, copy);
-
-            if(write_ops_vect.find(target) == write_ops_vect.end())
-                write_ops_vect[target] =
-                        std::vector<uint8_t>(((chnk_total + 7) / 8));
-            gkfs::rpc::set_bitset(write_ops_vect[target], chnk_id - chnk_start);
-
-            if(target_chnks.count(target) == 0) {
-                target_chnks.insert(
-                        std::make_pair(target, std::vector<uint64_t>{chnk_id}));
-                targets.push_back(target);
-                // /* --PFL implementation-- */
-                target_total_size.insert(
-                        std::make_pair(target, cfg::PFLsize[cpn]));
-            } else {
-                target_chnks[target].push_back(chnk_id);
-                // /* --PFL implementation-- */
-                target_total_size[target] += cfg::PFLsize[cpn];
+    for(const auto& range : epoch_ranges) {
+        for(uint64_t chnk_id = range.chunk_start; chnk_id <= range.chunk_end;
+            ++chnk_id) {
+            // /* --PFL implementation-- */
+            //track component number of current chunk
+            if(cpn + 1 < cfg::PFLcomponents &&
+               chnk_id >= cfg::PFLchunkID[cpn + 1]) {
+                cpn++;
             }
+            for(auto copy = num_copies ? 1 : 0; copy < num_copies + 1; copy++) {
+                auto target = locate_epoch_target(path, chnk_id, copy,
+                                                  range.epoch, range.host_size);
 
-            // set first and last chnk targets
-            if(chnk_id == chnk_start) {
-                chnk_start_target.insert(target);
-            }
+                if(write_ops_vect.find(target) == write_ops_vect.end())
+                    write_ops_vect[target] =
+                            std::vector<uint8_t>(((chnk_total + 7) / 8));
+                gkfs::rpc::set_bitset(write_ops_vect[target],
+                                      chnk_id - chnk_start);
 
-            if(chnk_id == chnk_end) {
-                chnk_end_target.insert(target);
+                if(target_chnks.count(target) == 0) {
+                    target_chnks.insert(std::make_pair(
+                            target, std::vector<uint64_t>{chnk_id}));
+                    targets.push_back(target);
+                    // /* --PFL implementation-- */
+                    target_total_size.insert(
+                            std::make_pair(target, cfg::PFLsize[cpn]));
+                } else {
+                    target_chnks[target].push_back(chnk_id);
+                    // /* --PFL implementation-- */
+                    target_total_size[target] += cfg::PFLsize[cpn];
+                }
+
+                // set first and last chnk targets
+                if(chnk_id == chnk_start) {
+                    chnk_start_target.insert(target);
+                }
+
+                if(chnk_id == chnk_end) {
+                    chnk_end_target.insert(target);
+                }
             }
         }
     }
@@ -183,10 +333,9 @@ forward_write(const string& path, const void* buf, const off64_t offset,
                                                gkfs::config::rpc::chunksize);
         }
 
-        auto endp = CTX->hosts().at(target);
-        /* --Multiple GekkoFS--*/
-        auto fs_id = CTX->distributor()->locate_fs(path);
-        /* --Multiple GekkoFS--*/
+        const auto target_host_id = global_host_id(target);
+        auto endp = CTX->host_endpoint(target_host_id);
+        const auto epoch_host_size = CTX->epoch_hosts_size(target.epoch);
         try {
             LOG(DEBUG, "Sending RPC ...");
 
@@ -196,8 +345,8 @@ forward_write(const string& path, const void* buf, const off64_t offset,
                     // a potential offset
                     block_overrun(offset, gkfs::config::rpc::chunksize),
                     /* --Multiple GekkoFS--*/
-                    target,
-                    CTX->hostsconfig().at(fs_id).fs_size_seq.size(),
+                    target.target,
+                    epoch_host_size,
                     /* --Multiple GekkoFS--*/
                     // number of chunks handled by that destination
                     gkfs::rpc::compress_bitset(write_ops_vect[target]),
@@ -207,7 +356,8 @@ forward_write(const string& path, const void* buf, const off64_t offset,
                     // chunk end id of this write
                     chnk_end,
                     // total size to write
-                    total_chunk_size, local_buffers);
+                    total_chunk_size, local_buffers, file_latest_version_epoch,
+                    CTX->unique_id());
 
             // TODO(amiranda): add a post() with RPC_TIMEOUT to hermes so that
             // we can retry for RPC_TRIES (see old commits with margo)
@@ -218,14 +368,14 @@ forward_write(const string& path, const void* buf, const off64_t offset,
                     ld_network_service->post<gkfs::rpc::write_data>(endp, in));
 
             LOG(DEBUG,
-                "host: {}, path: \"{}\", chunk_start: {}, chunk_end: {}, chunks: {}, size: {}, offset: {}",
-                target, path, chnk_start, chnk_end, in.chunk_n(),
-                total_chunk_size, in.offset());
+                "host: {} epoch: {} epoch_target: {}, path: \"{}\", chunk_start: {}, chunk_end: {}, chunks: {}, size: {}, offset: {}",
+                target_host_id, target.epoch, target.target, path, chnk_start,
+                chnk_end, in.chunk_n(), total_chunk_size, in.offset());
         } catch(const std::exception& ex) {
             LOG(ERROR,
                 "Unable to send non-blocking rpc for "
-                "path \"{}\" [peer: {}]",
-                path, target);
+                "path \"{}\" [epoch: {}, target: {}, peer: {}]",
+                path, target.epoch, target.target, target_host_id);
             if(num_copies == 0)
                 return make_pair(EBUSY, 0);
         }
@@ -263,8 +413,9 @@ forward_write(const string& path, const void* buf, const off64_t offset,
 #endif
             }
         } catch(const std::exception& ex) {
-            LOG(ERROR, "Failed to get rpc output for path \"{}\" [peer: {}]",
-                path, targets[idx]);
+            LOG(ERROR,
+                "Failed to get rpc output for path \"{}\" [epoch: {}, target: {}]",
+                path, targets[idx].epoch, targets[idx].target);
             std::cout<< "Forward_write Error:" << ex.what() << std::endl;
             err = EIO;
         }
@@ -318,9 +469,14 @@ forward_write(const string& path, const void* buf, const off64_t offset,
 pair<int, ssize_t>
 forward_read(const string& path, void* buf, const off64_t offset,
              const size_t read_size, const int8_t num_copies,
-             std::set<int8_t>& failed) {
+             std::set<uint64_t>& failed, std::uint64_t latest_version_epoch) {
     // import pow2-optimized arithmetic functions
     using namespace gkfs::utils::arithmetic;
+    const auto file_layout_snapshot = load_layout_snapshot_for_path(path);
+    const auto file_latest_version_epoch =
+            latest_version_epoch
+                    ? latest_version_epoch
+                    : snapshot_latest_version_epoch(file_layout_snapshot);
 
     // Calculate chunkid boundaries and numbers so that daemons know in which
     // interval to look for chunks
@@ -328,65 +484,76 @@ forward_read(const string& path, void* buf, const off64_t offset,
     auto chnk_end =
             block_index((offset + read_size - 1), gkfs::config::rpc::chunksize);
     auto chnk_total = (chnk_end - chnk_start) + 1;
+    const auto epoch_ranges = split_chunk_range_by_epoch(
+            file_layout_snapshot, chnk_start, chnk_end,
+            file_latest_version_epoch);
     /* --PFL implementation-- */
     //component number of first chunk
     auto cpn = last_smaller_equal(cfg::PFLchunkID, chnk_start);
     //help to calculate total chunk size of target
-    std::map<uint64_t, uint64_t> target_total_size{};
+    std::map<EpochTarget, uint64_t> target_total_size{};
     /* --PFL implementation-- */
     // Collect all chunk ids within count that have the same destination so
     // that those are send in one rpc bulk transfer
-    std::map<uint64_t, std::vector<uint64_t>> target_chnks{};
+    std::map<EpochTarget, std::vector<uint64_t>> target_chnks{};
 
     // contains the recipient ids, used to access the target_chnks map.
     // First idx is chunk with potential offset
-    std::vector<uint64_t> targets{};
+    std::vector<EpochTarget> targets{};
     // targets for the first and last chunk as they need special treatment
-    uint64_t chnk_start_target = 0;
-    uint64_t chnk_end_target = 0;
-    std::unordered_map<uint64_t, std::vector<uint8_t>> read_bitset_vect;
+    EpochTarget chnk_start_target{};
+    EpochTarget chnk_end_target{};
+    std::map<EpochTarget, std::vector<uint8_t>> read_bitset_vect;
 
-    for(uint64_t chnk_id = chnk_start; chnk_id <= chnk_end; chnk_id++) {
-        // /* --PFL implementation-- */
-        //track component number of current chunk
-        if(cpn + 1 < cfg::PFLcomponents 
-            && chnk_id >= cfg::PFLchunkID[cpn + 1]) cpn++;
-        auto target = CTX->distributor()->locate_data(path, chnk_id, 0);
-        if(num_copies > 0) {
-            // If we have some failures we select another copy (randomly).
-            while(failed.find(target) != failed.end()) {
-                LOG(DEBUG, "Selecting another node, target: {} down", target);
-                target = CTX->distributor()->locate_data(path, chnk_id,
-                                                         rand() % num_copies);
+    for(const auto& range : epoch_ranges) {
+        for(uint64_t chnk_id = range.chunk_start; chnk_id <= range.chunk_end;
+            ++chnk_id) {
+            // /* --PFL implementation-- */
+            //track component number of current chunk
+            if(cpn + 1 < cfg::PFLcomponents &&
+               chnk_id >= cfg::PFLchunkID[cpn + 1]) {
+                cpn++;
             }
-        }
+            auto target = locate_epoch_target(path, chnk_id, 0, range.epoch,
+                                              range.host_size);
+            if(num_copies > 0) {
+                // If we have some failures we select another copy (randomly).
+                while(failed.find(global_host_id(target)) != failed.end()) {
+                    LOG(DEBUG, "Selecting another node, target: {} down",
+                        target.target);
+                    target = locate_epoch_target(path, chnk_id,
+                                                 rand() % num_copies,
+                                                 range.epoch, range.host_size);
+                }
+            }
 
-        if(read_bitset_vect.find(target) == read_bitset_vect.end())
-            read_bitset_vect[target] =
-                    std::vector<uint8_t>(((chnk_total + 7) / 8));
-        read_bitset_vect[target][(chnk_id - chnk_start) / 8] |=
-                1 << ((chnk_id - chnk_start) % 8); // set
+            if(read_bitset_vect.find(target) == read_bitset_vect.end())
+                read_bitset_vect[target] =
+                        std::vector<uint8_t>(((chnk_total + 7) / 8));
+            read_bitset_vect[target][(chnk_id - chnk_start) / 8] |=
+                    1 << ((chnk_id - chnk_start) % 8); // set
 
-        if(target_chnks.count(target) == 0) {
-            target_chnks.insert(
-                    std::make_pair(target, std::vector<uint64_t>{chnk_id}));
-            targets.push_back(target);
-            // /* --PFL implementation-- */
-            target_total_size.insert(
-                        std::make_pair(target, cfg::PFLsize[cpn]));
-        } else {
-            target_chnks[target].push_back(chnk_id);
-            // /* --PFL implementation-- */
-            target_total_size[target] += cfg::PFLsize[cpn];
-        }
+            if(target_chnks.count(target) == 0) {
+                target_chnks.insert(std::make_pair(
+                        target, std::vector<uint64_t>{chnk_id}));
+                targets.push_back(target);
+                // /* --PFL implementation-- */
+                target_total_size.insert(
+                            std::make_pair(target, cfg::PFLsize[cpn]));
+            } else {
+                target_chnks[target].push_back(chnk_id);
+                // /* --PFL implementation-- */
+                target_total_size[target] += cfg::PFLsize[cpn];
+            }
 
-        // set first and last chnk targets
-        if(chnk_id == chnk_start) {
-            chnk_start_target = target;
-        }
+            // set first and last chnk targets
+            if(chnk_id == chnk_start) {
+                chnk_start_target = target;
+            }
 
-        if(chnk_id == chnk_end) {
-            chnk_end_target = target;
+            if(chnk_id == chnk_end) {
+                chnk_end_target = target;
+            }
         }
     }
 
@@ -436,10 +603,9 @@ forward_read(const string& path, void* buf, const off64_t offset,
                                                gkfs::config::rpc::chunksize);
         }
 
-        auto endp = CTX->hosts().at(target);
-        /* --Multiple GekkoFS--*/
-        auto fs_id = CTX->distributor()->locate_fs(path);
-        /* --Multiple GekkoFS--*/
+        const auto target_host_id = global_host_id(target);
+        auto endp = CTX->host_endpoint(target_host_id);
+        const auto epoch_host_size = CTX->epoch_hosts_size(target.epoch);
         try {
 
             LOG(DEBUG, "Sending RPC ...");
@@ -450,8 +616,8 @@ forward_read(const string& path, void* buf, const off64_t offset,
                     // a potential offset
                     block_overrun(offset, gkfs::config::rpc::chunksize), 
                     /* --Multiple GekkoFS--*/
-                    target,
-                    CTX->hostsconfig().at(fs_id).fs_size_seq.size(),
+                    target.target,
+                    epoch_host_size,
                     /* --Multiple GekkoFS--*/
                     gkfs::rpc::compress_bitset(read_bitset_vect[target]),
                     // number of chunks handled by that destination
@@ -461,7 +627,8 @@ forward_read(const string& path, void* buf, const off64_t offset,
                     // chunk end id of this write
                     chnk_end,
                     // total size to write
-                    total_chunk_size, local_buffers);
+                    total_chunk_size, local_buffers, file_latest_version_epoch,
+                    CTX->unique_id());
 
             // TODO(amiranda): add a post() with RPC_TIMEOUT to hermes so
             // that we can retry for RPC_TRIES (see old commits with margo)
@@ -473,20 +640,21 @@ forward_read(const string& path, void* buf, const off64_t offset,
                     ld_network_service->post<gkfs::rpc::read_data>(endp, in));
 
             LOG(DEBUG,
-                "host: {}, path: {}, chunk_start: {}, chunk_end: {}, chunks: {}, size: {}, offset: {}",
-                target, path, chnk_start, chnk_end, in.chunk_n(),
-                total_chunk_size, in.offset());
+                "host: {} epoch: {} epoch_target: {}, path: {}, chunk_start: {}, chunk_end: {}, chunks: {}, size: {}, offset: {}",
+                target_host_id, target.epoch, target.target, path, chnk_start,
+                chnk_end, in.chunk_n(), total_chunk_size, in.offset());
 
             LOG(TRACE_READS,
-                "read {} host: {}, path: {}, chunk_start: {}, chunk_end: {}",
-                CTX->get_hostname(), target, path, chnk_start, chnk_end);
+                "read {} host: {}, epoch: {}, epoch_target: {}, path: {}, chunk_start: {}, chunk_end: {}",
+                CTX->get_hostname(), target_host_id, target.epoch,
+                target.target, path, chnk_start, chnk_end);
 
 
         } catch(const std::exception& ex) {
             LOG(ERROR,
                 "Unable to send non-blocking rpc for path \"{}\" "
-                "[peer: {}]",
-                path, target);
+                "[epoch: {}, target: {}, peer: {}]",
+                path, target.epoch, target.target, target_host_id);
             return make_pair(EBUSY, 0);
         }
     }
@@ -512,12 +680,13 @@ forward_read(const string& path, void* buf, const off64_t offset,
             out_size += static_cast<size_t>(out.io_size());
 
         } catch(const std::exception& ex) {
-            LOG(ERROR, "Failed to get rpc output for path \"{}\" [peer: {}]",
-                path, targets[idx]);
+            LOG(ERROR,
+                "Failed to get rpc output for path \"{}\" [epoch: {}, target: {}]",
+                path, targets[idx].epoch, targets[idx].target);
             std::cout<< "Forward_read Error:" << ex.what() << std::endl;
             err = EIO;
             // We should get targets[idx] and remove from the list of peers
-            failed.insert(targets[idx]);
+            failed.insert(global_host_id(targets[idx]));
             // Then repeat the read with another peer (We repear the full
             // read, this can be optimised but it is a cornercase)
         }
@@ -559,11 +728,21 @@ forward_truncate(const std::string& path, size_t current_size, size_t new_size,
     const unsigned int chunk_end = block_index(current_size - new_size - 1,
                                                gkfs::config::rpc::chunksize);
 
-    std::unordered_set<unsigned int> hosts;
-    for(unsigned int chunk_id = chunk_start; chunk_id <= chunk_end;
-        ++chunk_id) {
-        for(auto copy = 0; copy < (num_copies + 1); ++copy) {
-            hosts.insert(CTX->distributor()->locate_data(path, chunk_id, copy));
+    const auto file_layout_snapshot = load_layout_snapshot_for_path(path);
+    const auto file_latest_version_epoch =
+            snapshot_latest_version_epoch(file_layout_snapshot);
+    const auto epoch_ranges = split_chunk_range_by_epoch(
+            file_layout_snapshot, chunk_start, chunk_end,
+            file_latest_version_epoch);
+    std::unordered_set<uint64_t> hosts;
+    for(const auto& range : epoch_ranges) {
+        for(uint64_t chunk_id = range.chunk_start; chunk_id <= range.chunk_end;
+            ++chunk_id) {
+            for(auto copy = 0; copy < (num_copies + 1); ++copy) {
+                const auto target = locate_epoch_target(
+                        path, chunk_id, copy, range.epoch, range.host_size);
+                hosts.insert(global_host_id(target));
+            }
         }
     }
 
@@ -572,12 +751,13 @@ forward_truncate(const std::string& path, size_t current_size, size_t new_size,
     auto err = 0;
 
     for(const auto& host : hosts) {
-        auto endp = CTX->hosts().at(host);
+        auto endp = CTX->host_endpoint(host);
 
         try {
             LOG(DEBUG, "Sending RPC ...");
 
-            gkfs::rpc::trunc_data::input in(path, new_size);
+            gkfs::rpc::trunc_data::input in(path, new_size,
+                                            CTX->unique_id());
 
             // TODO(amiranda): add a post() with RPC_TIMEOUT to hermes so
             // that we can retry for RPC_TRIES (see old commits with margo)

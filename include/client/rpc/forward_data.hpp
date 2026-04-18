@@ -33,6 +33,7 @@
 #include <string>
 #include <memory>
 #include <set>
+#include <cstdint>
 namespace gkfs::rpc {
 
 struct ChunkStat {
@@ -46,12 +47,14 @@ struct ChunkStat {
 
 std::pair<int, ssize_t>
 forward_write(const std::string& path, const void* buf, off64_t offset,
-              size_t write_size, const int8_t num_copy = 0);
+              size_t write_size, const int8_t num_copy = 0,
+              std::uint64_t latest_version_epoch = 0);
 
 std::pair<int, ssize_t>
 forward_read(const std::string& path, void* buf, off64_t offset,
              size_t read_size, const int8_t num_copies,
-             std::set<int8_t>& failed);
+             std::set<uint64_t>& failed,
+             std::uint64_t latest_version_epoch = 0);
 
 int
 forward_truncate(const std::string& path, size_t current_size, size_t new_size,

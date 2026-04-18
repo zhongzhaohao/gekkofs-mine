@@ -48,8 +48,8 @@ SimpleHashDistributor::SimpleHashDistributor(host_t localhost,
                                              std::vector<fs_info> fs_infos,
                                              std::map<std::string, unsigned int>* pathfs,
                                              host_t localfs)
-    : localhost_(localhost), fs_infos_(fs_infos), pathfs_(pathfs), localfs_(localfs),
-    all_hosts_(fs_infos[localfs].fs_size_seq.size()) {
+    : localhost_(localhost), localfs_(localfs), fs_infos_(fs_infos),
+      all_hosts_(fs_infos[localfs].fs_size_seq.size()), pathfs_(pathfs) {
     ::iota(all_hosts_.begin(), all_hosts_.end(), 0);
 }
 
@@ -84,7 +84,7 @@ SimpleHashDistributor::locate_fs(const std::string& path) const{
  * Only used for forward_getSuccessThread
  */
 host_t
-SimpleHashDistributor::locate(const std::string& path, 
+SimpleHashDistributor::locate(const std::string& path,
                 unsigned int hostnum, const int num_copy) const{
     return (str_hash(path) + num_copy) % hostnum;
 }
@@ -102,13 +102,13 @@ SimpleHashDistributor::locate(const std::string& path,
  */
 host_t
 SimpleHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
-                                   const int num_copy) const {
+                                   const int num_copy, const int size) const {
     unsigned int fs_id = localfs_;
     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
     auto &fs_seq_map = fs_infos_.at(fs_id).fs_size_seq;
     if(!cfg::use_PFL)
-        return fs_seq_map[(str_hash(path + ::to_string(chnk_id)) + num_copy) 
-                                        % fs_seq_map.size()];    
+        return fs_seq_map[(str_hash(path + ::to_string(chnk_id)) + num_copy)
+                                        % fs_seq_map.size()];
     // /*  --PFL implementation-- */
     auto cpn = last_smaller_equal(cfg::PFLchunkID, chnk_id);
     auto host_size = fs_seq_map.size();
@@ -116,8 +116,8 @@ SimpleHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
     auto hash = str_hash(path + ::to_string(chnk_id)) + num_copy;
     //locate first host in hosts
     auto hash_p = str_hash(path) + num_copy;
-    //final host: first host + order * step 
-    return fs_seq_map[(hash_p + hash % stripe_count * (host_size / stripe_count)) 
+    //final host: first host + order * step
+    return fs_seq_map[(hash_p + hash % stripe_count * (host_size / stripe_count))
                                                     % host_size];
 }
 
@@ -145,27 +145,27 @@ SimpleHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
 //     if(pathfs_ && pathfs_->count(path)) fs_id = (*pathfs_)[path];
 //     unsigned int prefix_hosts = hosts_size_[fs_id].first;
 //     if(!cfg::use_PFL)
-//         return (str_hash(path + ::to_string(chnk_id)) + num_copy) 
-//                                         % hosts_size_.at(fs_id).second + prefix_hosts;  
-//     // /*  --PFL implementation-- */  
+//         return (str_hash(path + ::to_string(chnk_id)) + num_copy)
+//                                         % hosts_size_.at(fs_id).second + prefix_hosts;
+//     // /*  --PFL implementation-- */
 //     auto cpn = last_smaller_equal(cfg::PFLchunkID, chnk_id);
 //     auto host_size = hosts_size_.at(fs_id).second;
 //     auto stripe_count = min(cfg::PFLcount[cpn], host_size);
 //     auto hash = str_hash(path + ::to_string(chnk_id)) + num_copy;
 //     //locate first host in hosts
 //     auto hash_p = str_hash(path) + num_copy;
-//     //final host: first host + order * step 
-//     return (hash_p + hash % stripe_count * (host_size / stripe_count)) 
+//     //final host: first host + order * step
+//     return (hash_p + hash % stripe_count * (host_size / stripe_count))
 //                                                     % host_size + prefix_hosts;
 // }
 host_t
 SimpleHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
                                    unsigned int hosts_size,
-                                   const int num_copy) {
+                                   const int num_copy, const int size) {
     return 0;
 }
 
-/** 
+/**
  * --PFL implementation--
  * find the host set because of stripe count
  * Only used for forward_remove: find all hosts
@@ -182,9 +182,9 @@ SimpleHashDistributor::locate_host_set(const string& path, const uint64_t size,
     std::set<host_t> host_set;
     auto host_size = fs_seq_map.size();
     auto end_cpn = last_smaller_equal(cfg::PFLlayout, size);
-    //hosts before end component 
+    //hosts before end component
     for(uint32_t cpn = 0; cpn < end_cpn; cpn ++){
-        auto stripe_count = min(cfg::PFLcount[cpn], host_size); 
+        auto stripe_count = min(cfg::PFLcount[cpn], host_size);
         auto step = host_size / stripe_count;
         for(auto cpy = 0;cpy < num_copy + 1; cpy ++ ){
             auto hash_p = str_hash(path) + cpy;
@@ -194,7 +194,7 @@ SimpleHashDistributor::locate_host_set(const string& path, const uint64_t size,
             }
         }
     }
-    //hosts at end component 
+    //hosts at end component
     auto chnk_id = cfg::PFLchunkID[end_cpn];
     auto chnk_num = (size - cfg::PFLlayout[end_cpn]) / cfg::PFLsize[end_cpn] + 1;
     for(uint32_t chnk_off = 0; chnk_off < chnk_num; chnk_off ++){
@@ -228,7 +228,7 @@ SimpleHashDistributor::locate_file_metadata_fs(const string& path,
                                             const int num_copy, const int fs) const {
     unsigned int fs_id = fs;
     auto &fs_seq_map = fs_infos_.at(fs_id).fs_size_seq;
-    //note this path is a wrappered path                                           
+    //note this path is a wrappered path
     return fs_seq_map[(str_hash(path) + num_copy) % fs_seq_map.size()];
 }
 
@@ -246,7 +246,104 @@ SimpleHashDistributor::locate_directory_metadata(const string& path) const {
         auto &fs_seq_map = fs_infos_.at(fs_id).fs_size_seq;
         vector<host_t> target_hosts(fs_seq_map.begin(), fs_seq_map.end());
         return target_hosts;
-    } 
+    }
+    return all_hosts_;
+}
+
+host_t
+ConsistencyHashDistributor::jump_consistent_hash(std::uint64_t key,
+                                                 std::int32_t buckets) {
+    if(buckets <= 0) {
+        return 0;
+    }
+
+    std::int64_t b = -1;
+    std::int64_t j = 0;
+    while(j < buckets) {
+        b = j;
+        key = key * 2862933555777941757ULL + 1;
+        j = static_cast<std::int64_t>(
+                (b + 1) *
+                (static_cast<double>(1LL << 31) /
+                 static_cast<double>((key >> 33) + 1)));
+    }
+
+    return static_cast<host_t>(b);
+}
+
+ConsistencyHashDistributor::ConsistencyHashDistributor() {}
+
+ConsistencyHashDistributor::ConsistencyHashDistributor(unsigned int hosts_size)
+    : hosts_size_(hosts_size),all_hosts_(hosts_size) {
+    ::iota(all_hosts_.begin(), all_hosts_.end(), 0);
+    }
+
+/* unused */
+unsigned int
+ConsistencyHashDistributor::hosts_size() const {
+    return 0;
+}
+
+host_t
+ConsistencyHashDistributor::localhost() const {
+    return 0;
+}
+
+
+host_t
+ConsistencyHashDistributor::locate_fs(const std::string& path) const{
+    return 0;
+}
+
+
+host_t
+ConsistencyHashDistributor::locate(const std::string& path,
+                unsigned int hostnum, const int num_copy) const{
+    return 0;
+}
+
+
+host_t
+ConsistencyHashDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
+                                   const int num_copy,const int size) const {
+    const auto key = std::hash<std::string>{}(
+            path + ":" + ::to_string(chnk_id) + ":" + ::to_string(num_copy));
+    return jump_consistent_hash(key, size);
+}
+
+host_t
+ConsistencyHashDistributor::locate_data(const string& path,
+                                        const chunkid_t& chnk_id,
+                                        unsigned int host_size,
+                                        const int num_copy,
+                                        const int size) {
+    return 0;
+}
+
+std::set<host_t>
+ConsistencyHashDistributor::locate_host_set(const string& path, const uint64_t size,
+                                   const int num_copy) const {
+    std::set<host_t> host_set;
+    return host_set;
+}
+
+host_t
+ConsistencyHashDistributor::locate_file_metadata(const string& path,
+                                            const int num_copy) const {
+    const auto key = std::hash<std::string>{}(path + ":" +
+                                              ::to_string(num_copy));
+    return jump_consistent_hash(key, hosts_size_);
+}
+
+host_t
+ConsistencyHashDistributor::locate_file_metadata_fs(const string& path,
+                                            const int num_copy,
+                                            const int fs) const {
+    return 0;
+}
+
+::vector<host_t>
+ConsistencyHashDistributor::locate_directory_metadata(const string& path) const {
     return all_hosts_;
 }
 
@@ -264,8 +361,8 @@ LocalOnlyDistributor::hosts_size() const {
 }
 
 host_t
-LocalOnlyDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
-                                  const int num_copy) const {
+LocalOnlyDistributor::locate_data(const std::string& path, const chunkid_t& chnk_id,
+                const int num_copy, const int size)const {
     return localhost_;
 }
 
@@ -299,14 +396,15 @@ ForwarderDistributor::hosts_size() const {
 host_t
 ForwarderDistributor::locate_data(const std::string& path,
                                   const chunkid_t& chnk_id,
-                                  const int num_copy) const {
+                                  const int num_copy, const int size) const {
     return fwd_host_;
 }
 
 host_t
 ForwarderDistributor::locate_data(const std::string& path,
                                   const chunkid_t& chnk_id,
-                                  unsigned int host_size, const int num_copy) {
+                                  unsigned int host_size, const int num_copy,
+                                  const int size) {
     return fwd_host_;
 }
 
@@ -409,7 +507,8 @@ GuidedDistributor::hosts_size() const {
 
 host_t
 GuidedDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
-                               unsigned int hosts_size, const int num_copy) {
+                               unsigned int hosts_size, const int num_copy,
+                               const int size) {
     if(hosts_size_ != hosts_size) {
         hosts_size_ = hosts_size;
         all_hosts_ = std::vector<unsigned int>(hosts_size);
@@ -421,7 +520,7 @@ GuidedDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
 
 host_t
 GuidedDistributor::locate_data(const string& path, const chunkid_t& chnk_id,
-                               const int num_copy) const {
+                               const int num_copy, const int size) const {
     auto it = map_interval.find(path);
     if(it != map_interval.end()) {
         auto it_f = it->second.first.IsInsideInterval(chnk_id);

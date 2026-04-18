@@ -56,6 +56,7 @@ private:
     nlink_t link_count_{}; // number of names for this inode (hardlinks)
     size_t size_{};     // size_ in bytes, might be computed instead of stored
     blkcnt_t blocks_{}; // allocated file system blocks_
+    std::uint64_t epoch_{}; // daemon epoch when this metadata entry was created
 #ifdef HAS_SYMLINKS
     std::string target_path_; // For links this is the path of the target file
 #ifdef HAS_RENAME
@@ -133,6 +134,12 @@ public:
 
     void
     blocks(blkcnt_t blocks_);
+
+    std::uint64_t
+    epoch() const;
+
+    void
+    epoch(std::uint64_t epoch_);
 
 #ifdef HAS_SYMLINKS
 

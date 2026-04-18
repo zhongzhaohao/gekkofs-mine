@@ -34,6 +34,7 @@
 #include <client/rpc/forward_management.hpp>
 #include <client/preload_util.hpp>
 #include <client/intercept.hpp>
+#include <client/malleability_logger.hpp>
 #include <client/open_file_map.hpp> /* --FGAP-- */
 #include <common/rpc/distributor.hpp>
 #include <common/common_defs.hpp>
@@ -82,10 +83,12 @@ load_workflow_mode() {
                    use_workflow.begin(), ::tolower);
     auto workflow = gkfs::env::get_var(gkfs::env::WORK_FLOW,
                                   "default_job");//todo default name of work flow
+    auto unique_id = gkfs::env::get_var(gkfs::env::UNIQUE_ID, "");
     auto mergeflows = gkfs::env::get_var(gkfs::env::MERGE_FLOWS,
                             "");
     CTX->use_workflow(use_workflow == "on");
     CTX->workflow(workflow);
+    CTX->unique_id(unique_id);
     CTX->mergeflows(mergeflows);
 }
 
@@ -265,10 +268,15 @@ init_environment() {
     auto distributor = std::make_shared<gkfs::rpc::GuidedDistributor>(
             CTX->local_host_id(), CTX->hosts().size());
 #else
+#ifdef GKFS_USE_SIMPLE_DISTRIBUTION
     auto distributor = std::make_shared<gkfs::rpc::SimpleHashDistributor>(
             CTX->local_host_id(), CTX->hostsconfig(), &(CTX->wrapper_pathfs()), CTX->local_fs_id());
+#else
+    auto distributor = std::make_shared<gkfs::rpc::ConsistencyHashDistributor>(
+             CTX->hosts().size());
 #endif
     CTX->distributor(distributor);
+#endif
 #endif
 
 
@@ -363,14 +371,16 @@ destroy_preload() {
     destroy_forwarding_mapper();
 #endif
 
+    gkfs::preload::stop_interception();
+    CTX->disable_interception();
+    LOG(DEBUG, "Syscall interception stopped");
+
+    gkfs::malleability::shutdown();
+
     CTX->clear_hosts();
     LOG(DEBUG, "Peer information deleted");
     ld_network_service.reset();
     LOG(DEBUG, "RPC subsystem shut down");
-
-    gkfs::preload::stop_interception();
-    CTX->disable_interception();
-    LOG(DEBUG, "Syscall interception stopped");
 
     LOG(INFO, "All subsystems shut down. Client shutdown complete.");
 }
@@ -395,6 +405,8 @@ gkfs_init() {
 
 extern "C" int
 gkfs_end() {
+    gkfs::malleability::shutdown();
+
     CTX->clear_hosts();
     LOG(DEBUG, "Peer information deleted");
 

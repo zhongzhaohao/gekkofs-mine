@@ -43,19 +43,32 @@ MERCURY_GEN_PROC(rpc_err_out_t, ((hg_int32_t) (err)))
 MERCURY_GEN_PROC(rpc_mk_node_in_t,
                  ((hg_const_string_t) (path))((uint32_t) (mode)))
 
+MERCURY_GEN_PROC(
+        rpc_mk_node_out_t,
+        ((hg_int32_t) (err))((hg_uint64_t) (latest_version_epoch)))
+
 MERCURY_GEN_PROC(rpc_path_only_in_t, ((hg_const_string_t) (path)))
 
-MERCURY_GEN_PROC(rpc_stat_out_t,
-                 ((hg_int32_t) (err))((hg_const_string_t) (db_val)))
+MERCURY_GEN_PROC(rpc_stat_in_t,
+                 ((hg_const_string_t) (path))((hg_bool_t) (update_layout)))
 
-MERCURY_GEN_PROC(rpc_rm_node_in_t, ((hg_const_string_t) (path)))
+MERCURY_GEN_PROC(
+        rpc_stat_out_t,
+        ((hg_int32_t) (err))((hg_const_string_t) (db_val))(
+                (hg_uint64_t) (latest_version_epoch))(
+                (hg_const_string_t) (file_layout)))
+
+MERCURY_GEN_PROC(rpc_rm_node_in_t,
+                 ((hg_const_string_t) (path))((hg_const_string_t) (unique_id)))
 
 MERCURY_GEN_PROC(
         rpc_rm_metadata_out_t,
         ((hg_int32_t) (err))((hg_int64_t) (size))((hg_uint32_t) (mode)))
 
-MERCURY_GEN_PROC(rpc_trunc_in_t,
-                 ((hg_const_string_t) (path))((hg_uint64_t) (length)))
+MERCURY_GEN_PROC(
+        rpc_trunc_in_t,
+        ((hg_const_string_t) (path))((hg_uint64_t) (length))(
+                (hg_const_string_t) (unique_id)))
 
 MERCURY_GEN_PROC(
         rpc_update_metadentry_in_t,
@@ -70,10 +83,14 @@ MERCURY_GEN_PROC(
 
 MERCURY_GEN_PROC(rpc_update_metadentry_size_in_t,
                  ((hg_const_string_t) (path))((hg_uint64_t) (size))(
-                         (hg_int64_t) (offset))((hg_bool_t) (append)))
+                         (hg_int64_t) (offset))((hg_bool_t) (append))(
+                         (hg_uint64_t) (latest_version_epoch)))
 
-MERCURY_GEN_PROC(rpc_update_metadentry_size_out_t,
-                 ((hg_int32_t) (err))((hg_int64_t) (ret_offset)))
+MERCURY_GEN_PROC(
+        rpc_update_metadentry_size_out_t,
+        ((hg_int32_t) (err))((hg_int64_t) (ret_offset))(
+                (hg_uint64_t) (latest_version_epoch))(
+                (hg_const_string_t) (file_layout)))
 
 MERCURY_GEN_PROC(rpc_get_metadentry_size_out_t,
                  ((hg_int32_t) (err))((hg_int64_t) (ret_size)))
@@ -91,7 +108,8 @@ MERCURY_GEN_PROC(
                 (hg_uint64_t) (host_id))((hg_uint64_t) (host_size))(
                 (hg_const_string_t) (wbitset))((hg_uint64_t) (chunk_n))(
                 (hg_uint64_t) (chunk_start))((hg_uint64_t) (chunk_end))(
-                (hg_uint64_t) (total_chunk_size))((hg_bulk_t) (bulk_handle)))
+                (hg_uint64_t) (total_chunk_size))((hg_bulk_t) (bulk_handle))
+        ((hg_uint64_t) (latest_version_epoch))((hg_const_string_t) (unique_id)))
 
 MERCURY_GEN_PROC(rpc_data_out_t, ((int32_t) (err))((hg_size_t) (io_size)))
 
@@ -101,7 +119,8 @@ MERCURY_GEN_PROC(
                 (hg_uint64_t) (host_id))((hg_uint64_t) (host_size))(
                 (hg_const_string_t) (wbitset))((hg_uint64_t) (chunk_n))(
                 (hg_uint64_t) (chunk_start))((hg_uint64_t) (chunk_end))(
-                (hg_uint64_t) (total_chunk_size))((hg_bulk_t) (bulk_handle)))
+                (hg_uint64_t) (total_chunk_size))((hg_bulk_t) (bulk_handle))
+        ((hg_uint64_t) (latest_version_epoch))((hg_const_string_t) (unique_id)))
 
 MERCURY_GEN_PROC(rpc_get_dirents_in_t,
                  ((hg_const_string_t) (path))((hg_bulk_t) (bulk_handle)))
@@ -134,9 +153,10 @@ MERCURY_GEN_PROC(
                 (hg_uint64_t) (chunk_total))((hg_uint64_t) (chunk_free)))
 
 //management
-// MERCURY_GEN_PROC(
-//         rpc_daemon_update_epoch_in_t,
-//         ((hg_const_string_t) (action))((hg_const_string_t) (hostfile)))
+MERCURY_GEN_PROC(
+        rpc_daemon_update_epoch_in_t,
+        ((hg_int32_t) (action))((hg_uint64_t) (epoch))
+        ((hg_const_string_t) (hostfile))((hg_const_string_t) (unique_id)))
 
 //registry
 MERCURY_GEN_PROC(
@@ -153,6 +173,22 @@ MERCURY_GEN_PROC(
         ((hg_const_string_t) (work_flow))((hg_const_string_t) (hcfile))
         ((hg_const_string_t) (hfile)))
 
+MERCURY_GEN_PROC(
+        rpc_registry_register_mallea_in_t,
+        ((hg_const_string_t) (unique_id))((hg_const_string_t) (username))
+        ((hg_const_string_t) (exec_app_path))((hg_const_string_t) (paras))
+        ((hg_const_string_t) (hcfile))((hg_const_string_t) (hfile))
+        ((hg_uint32_t) (nodes))((hg_uint32_t) (ppn))((hg_bool_t) (force)))
+
+MERCURY_GEN_PROC(rpc_registry_query_mallea_in_t, ((hg_int32_t) (dummy)))
+
+MERCURY_GEN_PROC(
+        rpc_registry_query_mallea_out_t,
+        ((hg_int32_t) (err))((hg_const_string_t) (db_val)))
+
+MERCURY_GEN_PROC(rpc_registry_unregister_mallea_in_t,
+                 ((hg_const_string_t) (unique_id)))
+
 //stage
 MERCURY_GEN_PROC(
         rpc_stage_in_t,
@@ -162,7 +198,7 @@ MERCURY_GEN_PROC(
 MERCURY_GEN_PROC(
         rpc_stage_metadata_in_t,
         ((hg_const_string_t) (path))((hg_uint32_t) (mode))((hg_uint64_t) (size))
-        ((hg_int32_t) (flag)))
+        ((hg_int32_t) (flag))((hg_const_string_t) (unique_id)))
 
 MERCURY_GEN_PROC(rpc_stage_metadata_out_t,
                  ((hg_int32_t) (err))((hg_const_string_t) (db_val)))

@@ -37,6 +37,7 @@
 #include <common/rpc/rpc_util.hpp>
 #include <common/rpc/distributor.hpp>
 #include <common/rpc/rpc_types.hpp>
+#include <common/file_layout.hpp>
 using namespace std;
 
 namespace gkfs::rpc {
@@ -63,7 +64,7 @@ struct forward_stat_fs_args{
  * @param path
  * @param mode
  * @param copy Number of replica to create
- * @return error code
+ * @return error code and latest file-layout version epoch
  */
 int
 forward_create(const std::string& path, const mode_t mode, const int copy) {
@@ -85,6 +86,12 @@ forward_create(const std::string& path, const mode_t mode, const int copy) {
         }
         if(CTX->use_workflow())
            CTX->bloom_filter_vec().at(id).insert(path);
+        if(S_ISREG(mode)) {
+            CTX->file_layouts()[path] =
+                    gkfs::file_layout::make_file_layout_record(
+                            out.latest_version_epoch(), out.latest_version_epoch());
+            CTX->update_file_layout_global_epoch(out.latest_version_epoch());
+        }
         return 0;
     } catch(const std::exception& ex) {
         LOG(ERROR, "while getting rpc output");
@@ -106,7 +113,7 @@ forward_getSuccessResponseThread(void* data){
     auto endp = CTX->hosts().at(hostid);
   
     try {
-            auto out = ld_network_service->post<gkfs::rpc::stat>(endp, statfs_args->path)
+            auto out = ld_network_service->post<gkfs::rpc::stat>(endp, statfs_args->path, false)
                             .get()
                             .at(0);
             LOG(DEBUG, "Got response success: {}", out.err());
@@ -136,7 +143,7 @@ static inline std::string wrapper(std::string prefix, std::string path){
  * @return error code
  */
 int
-forward_stat(const std::string& path, string& attr, const int copy) {
+forward_stat(const std::string& path, string& attr, const int copy, bool update_layout) {
     /* --Multiple GekkoFS--*/
     auto hostsconfig_array = CTX->hostsconfig(); //Vector: config of all Single GekkoFS
     int total_fs_num = hostsconfig_array.size(); // Number of all Single GekkoFS
@@ -228,7 +235,9 @@ forward_stat(const std::string& path, string& attr, const int copy) {
             // TODO(amiranda): hermes will eventually provide a post(endpoint)
             // returning one result and a broadcast(endpoint_set) returning a
             // result_set. When that happens we can remove the .at(0) :/
-            auto out = ld_network_service->post<gkfs::rpc::stat>(endp, wrapper_path)
+            auto out = ld_network_service
+                            ->post<gkfs::rpc::stat>(endp, wrapper_path,
+                                                     update_layout)
                             .get()
                             .at(0);
             LOG(DEBUG, "Got response success: {}", out.err());
@@ -236,6 +245,14 @@ forward_stat(const std::string& path, string& attr, const int copy) {
                 return out.err();
 
             attr = out.db_val();
+            if(update_layout && !out.file_layout().empty()) {
+                auto& layouts = CTX->file_layouts();
+                gkfs::file_layout::publish_file_layout_snapshot_if_newer(
+                        layouts[wrapper_path], out.latest_version_epoch(),
+                        out.file_layout());
+                CTX->update_file_layout_global_epoch(
+                        out.latest_version_epoch());
+            }
         } catch(const std::exception& ex) {
             LOG(ERROR, "while getting rpc output");
             return EBUSY;
@@ -262,6 +279,7 @@ int
 forward_remove(const std::string& path, const int8_t num_copies) {
     int64_t size = 0;
     uint32_t mode = 0;
+    const auto unique_id = CTX->unique_id();
 
     for(auto copy = 0; copy < (num_copies + 1); copy++) {
         auto endp = CTX->hosts().at(
@@ -278,8 +296,9 @@ forward_remove(const std::string& path, const int8_t num_copies) {
             // TODO(amiranda): hermes will eventually provide a post(endpoint)
             // returning one result and a broadcast(endpoint_set) returning a
             // result_set. When that happens we can remove the .at(0) :/
+            gkfs::rpc::remove_metadata::input in(path, unique_id);
             auto out = ld_network_service
-                               ->post<gkfs::rpc::remove_metadata>(endp, path)
+                               ->post<gkfs::rpc::remove_metadata>(endp, in)
                                .get()
                                .at(0);
             LOG(DEBUG, "Got response success: {}", out.err());
@@ -308,7 +327,7 @@ forward_remove(const std::string& path, const int8_t num_copies) {
             try {
                 LOG(DEBUG, "Sending RPC to host: {}", endp.to_string());
 
-                gkfs::rpc::remove_data::input in(path);
+                gkfs::rpc::remove_data::input in(path, unique_id);
 
                 handles.emplace_back(
                         ld_network_service->post<gkfs::rpc::remove_data>(endp,
@@ -336,7 +355,7 @@ forward_remove(const std::string& path, const int8_t num_copies) {
                 try {
                     LOG(DEBUG, "Sending RPC to host: {}",
                         endp_metadata.to_string());
-                    gkfs::rpc::remove_data::input in(path);
+                    gkfs::rpc::remove_data::input in(path, unique_id);
                     handles.emplace_back(
                             ld_network_service->post<gkfs::rpc::remove_data>(
                                     endp_metadata, in));
@@ -382,7 +401,7 @@ forward_remove(const std::string& path, const int8_t num_copies) {
                 try {
                     LOG(DEBUG, "Sending RPC to host: {}", endp.to_string());
 
-                    gkfs::rpc::remove_data::input in(path);
+                    gkfs::rpc::remove_data::input in(path, unique_id);
 
                     // TODO(amiranda): add a post() with RPC_TIMEOUT to hermes so
                     // that we can retry for RPC_TRIES (see old commits with margo)
@@ -667,8 +686,9 @@ forward_rename(const string& oldpath, const string& newpath,
 pair<int, off64_t>
 forward_update_metadentry_size(const string& path, const size_t size,
                                const off64_t offset, const bool append_flag,
-                               const int num_copies) {                       
+                               const int num_copies) {
     std::vector<hermes::rpc_handle<gkfs::rpc::update_metadentry_size>> handles;
+    const auto file_latest_version_epoch  =   CTX->file_layout_latest_version_epoch(path);
 
     for(auto copy = 0; copy < num_copies + 1; copy++) {
         auto endp = CTX->hosts().at(
@@ -683,7 +703,8 @@ forward_update_metadentry_size(const string& path, const size_t size,
             handles.emplace_back(
                     ld_network_service->post<gkfs::rpc::update_metadentry_size>(
                             endp, path, size, offset,
-                            bool_to_merc_bool(append_flag)));
+                            bool_to_merc_bool(append_flag),
+                            file_latest_version_epoch));
         } catch(const std::exception& ex) {
             LOG(ERROR, "while getting rpc output");
             return make_pair(EBUSY, 0);
@@ -704,6 +725,14 @@ forward_update_metadentry_size(const string& path, const size_t size,
             } else {
                 valid = true;
                 out_size = out.ret_size();
+                if(!out.file_layout().empty()) {
+                    auto& layouts = CTX->file_layouts();
+                    gkfs::file_layout::publish_file_layout_snapshot_if_newer(
+                            layouts[path], out.latest_version_epoch(),
+                            out.file_layout());
+                    CTX->update_file_layout_global_epoch(
+                            out.latest_version_epoch());
+                }
             }
 
         } catch(const std::exception& ex) {

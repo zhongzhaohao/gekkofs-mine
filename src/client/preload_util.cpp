@@ -36,6 +36,7 @@
 #include <common/rpc/rpc_util.hpp>
 #include <common/env_util.hpp>
 #include <common/common_defs.hpp>
+#include <common/hostfile.hpp>
 
 #include <hermes.hpp>
 
@@ -201,11 +202,10 @@ namespace gkfs::utils {
  * @return Metadata
  */
 optional<gkfs::metadata::Metadata>
-get_metadata(const string& path, bool follow_links) {
+get_metadata(const string& path, bool follow_links, bool update_layout) {
     std::string attr;
-    auto err = gkfs::rpc::forward_stat(path, attr, 0);
-    // TODO: retry on failure
-
+    auto err = gkfs::rpc::forward_stat(path, attr, 0, update_layout);
+    // TODO: retry on failurea
     if(err) {
         auto copy = 1;
         while(copy < CTX->get_replicas() + 1 && err) {
@@ -478,6 +478,57 @@ connect_to_hosts(const vector<pair<string, string>>& hosts) {
     CTX->local_fs_id(0);
     CTX->hosts(addrs);
     CTX->hosts_name(hosts_name);
+
+    std::vector<uint64_t> epoch_hosts(hosts.size());
+    ::iota(epoch_hosts.begin(), epoch_hosts.end(), 0);
+    for(uint64_t id = 0; id < hosts.size(); ++id) {
+        CTX->register_host_uri(hosts.at(id).second, id);
+    }
+    CTX->epoch_hosts(0, epoch_hosts);
+}
+
+void
+ensure_epoch_hosts(gkfs::file_layout::epoch_t epoch) {
+    if(CTX->epoch_hosts_loaded(epoch)) {
+        return;
+    }
+
+    const auto base_hostfile = gkfs::env::get_var(
+            gkfs::env::HOSTS_FILE, gkfs::config::hostfile_path);
+    const auto hostfile = gkfs::utils::get_epoch_hostfile_name(
+            base_hostfile, CTX->unique_id(), epoch);
+
+    vector<pair<string, string>> hosts;
+    try {
+        hosts = load_hostfile(hostfile);
+    } catch(const exception& e) {
+        throw runtime_error(fmt::format("Failed to load epoch {} hostfile '{}': {}",
+                                        epoch, hostfile, e.what()));
+    }
+
+    std::vector<uint64_t> epoch_hosts;
+    epoch_hosts.reserve(hosts.size());
+    for(const auto& [hostname, uri] : hosts) {
+        if(auto host_id = CTX->host_index_by_uri(uri)) {
+            epoch_hosts.push_back(*host_id);
+            continue;
+        }
+
+        auto endpoint = lookup_endpoint(uri);
+        const auto host_id = CTX->append_host_if_absent(hostname, uri, endpoint);
+        epoch_hosts.push_back(host_id);
+        LOG(INFO, "Added host '{}' for epoch {} at CTX hosts index {}",
+            hostname, epoch, host_id);
+    }
+
+    if(epoch_hosts.empty()) {
+        throw runtime_error(fmt::format("Epoch {} hostfile '{}' is empty",
+                                        epoch, hostfile));
+    }
+
+    CTX->epoch_hosts(epoch, epoch_hosts);
+    LOG(INFO, "Loaded epoch {} host mapping with {} hosts", epoch,
+        epoch_hosts.size());
 }
 
 } // namespace gkfs::utils

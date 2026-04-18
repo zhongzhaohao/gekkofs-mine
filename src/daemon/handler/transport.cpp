@@ -52,7 +52,7 @@ void readFile(int src_fd, const std::string& src, std::vector<void*>& buffers,
         if (stage_in) {
             ret.second = pread(src_fd, buffers[cur_buf], read_size, cur_off);
         } else {
-            std::set<int8_t> failed;
+            std::set<uint64_t> failed;
             ret = gkfs::rpc::forward_read(src, buffers[cur_buf], cur_off, read_size, 0, failed);
         }
         if (ret.second <= 0 || ret.first) {

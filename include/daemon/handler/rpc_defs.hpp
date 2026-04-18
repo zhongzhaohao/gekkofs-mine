@@ -45,7 +45,7 @@ DECLARE_MARGO_RPC_HANDLER(rpc_srv_stage_metadata)
 DECLARE_MARGO_RPC_HANDLER(rpc_srv_get_bloom_filter)
 
 /* malleability */
-// DECLARE_MARGO_RPC_HANDLER(rpc_srv_daemon_update_epoch)
+DECLARE_MARGO_RPC_HANDLER(rpc_srv_daemon_update_epoch)
 
 /* visible API for RPC operations */
 

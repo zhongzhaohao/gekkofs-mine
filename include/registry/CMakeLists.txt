@@ -30,6 +30,8 @@ target_sources(
   gkfs_registry
   PUBLIC my-rpc.hpp
   	 env.hpp
+     mallea_scheduler.hpp
+     rpc_registration.hpp
      utils.hpp
      ../common/registry_merge_tree.hpp
 )

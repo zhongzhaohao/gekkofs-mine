@@ -30,6 +30,7 @@
 #include <daemon/backend/metadata/db.hpp>
 #include <common/bloom_filter.hpp>
 #include <spdlog/spdlog.h>
+#include <utility>
 
 namespace gkfs::daemon {
 
@@ -314,6 +315,51 @@ FsData::prometheus_gateway() const {
 void
 FsData::prometheus_gateway(const std::string& prometheus_gateway) {
     FsData::prometheus_gateway_ = prometheus_gateway;
+}
+
+std::uint64_t
+FsData::epoch() const {
+    return epoch_;
+}
+
+void
+FsData::epoch(std::uint64_t epoch) {
+    epoch_ = epoch;
+}
+
+gkfs::rpc::daemon_resize_action
+FsData::resize_action() const {
+    return resize_action_;
+}
+
+void
+FsData::resize_action(gkfs::rpc::daemon_resize_action action) {
+    resize_action_ = action;
+}
+
+const std::string&
+FsData::resize_hostfile() const {
+    return resize_hostfile_;
+}
+
+void
+FsData::resize_hostfile(std::string hostfile) {
+    resize_hostfile_ = std::move(hostfile);
+}
+
+const std::string&
+FsData::resize_unique_id() const {
+    return resize_unique_id_;
+}
+
+void
+FsData::resize_unique_id(std::string unique_id) {
+    resize_unique_id_ = std::move(unique_id);
+}
+
+gkfs::file_layout::FileLayoutMap&
+FsData::file_layouts() {
+    return file_layouts_;
 }
 
 } // namespace gkfs::daemon

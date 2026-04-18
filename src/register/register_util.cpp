@@ -10,6 +10,7 @@
 #include <fstream>
 #include <memory>
 #include <random>
+#include <system_error>
 #include <thread>
 
 #include <hermes.hpp>
@@ -174,6 +175,78 @@ register_registry(const std::string& workflow,
                 ld_network_service->post<gkfs::rpc::registry_register>(endp, in)
                         .get()
                         .at(0);
+        return out.err() ? out.err() : 0;
+    } catch(const std::exception&) {
+        return EBUSY;
+    }
+}
+
+int
+register_registry_mallea(const std::string& unique_id,
+                         const std::string& username,
+                         const std::string& exec_app_path,
+                         const std::string& paras,
+                         const std::string& hostconfigfile,
+                         const std::string& hostfile,
+                         uint32_t nodes,
+                         uint32_t ppn,
+                         bool force) {
+    auto endp = CTX->registry();
+    gkfs::rpc::registry_register_mallea::input in(unique_id, username,
+                                                  exec_app_path, paras,
+                                                  hostconfigfile, hostfile,
+                                                  nodes, ppn, force);
+
+    try {
+        auto out = ld_network_service
+                           ->post<gkfs::rpc::registry_register_mallea>(endp, in)
+                           .get()
+                           .at(0);
+        return out.err() ? out.err() : 0;
+    } catch(const std::exception&) {
+        return EBUSY;
+    }
+}
+
+int
+query_registry_mallea(const std::string& output_path) {
+    auto endp = CTX->registry();
+    gkfs::rpc::registry_query_mallea::input in;
+
+    try {
+        auto out = ld_network_service
+                           ->post<gkfs::rpc::registry_query_mallea>(endp, in)
+                           .get()
+                           .at(0);
+        if(out.err() != 0) {
+            return out.err();
+        }
+
+        std::ofstream ofs(output_path, std::ios::out | std::ios::trunc);
+        if(!ofs) {
+            return EIO;
+        }
+        ofs << out.db_val();
+        if(!ofs) {
+            return EIO;
+        }
+        return 0;
+    } catch(const std::exception&) {
+        return EBUSY;
+    }
+}
+
+int
+unregister_registry_mallea(const std::string& unique_id) {
+    auto endp = CTX->registry();
+    gkfs::rpc::registry_unregister_mallea::input in(unique_id);
+
+    try {
+        auto out = ld_network_service
+                           ->post<gkfs::rpc::registry_unregister_mallea>(endp,
+                                                                         in)
+                           .get()
+                           .at(0);
         return out.err() ? out.err() : 0;
     } catch(const std::exception&) {
         return EBUSY;

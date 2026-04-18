@@ -29,6 +29,7 @@
 target_sources(
   gkfs_daemon
   PUBLIC daemon.hpp
+         malleability_logger.hpp
          util.hpp
          ops/data.hpp
          ops/metadentry.hpp
@@ -43,6 +44,7 @@ if(GKFS_ENABLE_FORWARDING)
   target_sources(
     gkfwd_daemon
     PUBLIC daemon.hpp
+           malleability_logger.hpp
            util.hpp
            ops/data.hpp
            ops/metadentry.hpp

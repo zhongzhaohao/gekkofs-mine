@@ -33,6 +33,7 @@
 #include <client/preload.hpp>
 #include <common/metadata.hpp>
 #include <common/fs_info.hpp>
+#include <common/file_layout.hpp>
 #include <string>
 #include <iostream>
 #include <map>
@@ -72,7 +73,7 @@ to_underlying(E e) {
 }
 
 std::optional<gkfs::metadata::Metadata>
-get_metadata(const std::string& path, bool follow_links = false);
+get_metadata(const std::string& path, bool follow_links = false, bool update_layout = false);
 
 int
 metadata_to_stat(const std::string& path, const gkfs::metadata::Metadata& md,
@@ -89,6 +90,9 @@ read_hosts_file();
 
 void
 connect_to_hosts(const std::vector<std::pair<std::string, std::string>>& hosts);
+
+void
+ensure_epoch_hosts(gkfs::file_layout::epoch_t epoch);
 
 /* --Multiple GekkoFS-- */
 void 

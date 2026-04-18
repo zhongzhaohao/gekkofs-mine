@@ -28,12 +28,14 @@
 
 target_sources(
   gkfs_daemon PUBLIC cmake_configure.hpp.in common_defs.hpp rpc/rpc_types.hpp
-                     rpc/rpc_util.hpp
+                     rpc/rpc_util.hpp file_layout.hpp hostfile.hpp
+                     malleability_logger.hpp
 )
 
 if(GKFS_ENABLE_FORWARDING)
   target_sources(
     gkfwd_daemon PUBLIC cmake_configure.hpp.in common_defs.hpp
-                        rpc/rpc_types.hpp rpc/rpc_util.hpp
+                        rpc/rpc_types.hpp rpc/rpc_util.hpp file_layout.hpp
+                        hostfile.hpp malleability_logger.hpp
   )
 endif()

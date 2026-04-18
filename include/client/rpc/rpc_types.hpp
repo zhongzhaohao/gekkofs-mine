@@ -36,6 +36,7 @@
 #include <mercury_macros.h>
 
 // C++ includes
+#include <cstdint>
 #include <string>
 
 // hermes includes
@@ -601,6 +602,320 @@ struct registry_register {
     };
 };
 
+struct registry_register_mallea {
+
+    class input;
+
+    class output;
+
+    using self_type = registry_register_mallea;
+    using handle_type = hermes::rpc_handle<self_type>;
+    using input_type = input;
+    using output_type = output;
+    using mercury_input_type = rpc_registry_register_mallea_in_t;
+    using mercury_output_type = rpc_err_out_t;
+
+    constexpr static const uint64_t public_id = 22;
+
+    constexpr static const hg_id_t mercury_id = 0;
+
+    constexpr static const auto name = gkfs::rpc::tag::registry_register_mallea;
+
+    constexpr static const auto requires_response = true;
+
+    constexpr static const auto mercury_in_proc_cb =
+            HG_GEN_PROC_NAME(rpc_registry_register_mallea_in_t);
+
+    constexpr static const auto mercury_out_proc_cb =
+            HG_GEN_PROC_NAME(rpc_err_out_t);
+
+    class input {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        input(const std::string& unique_id, const std::string& username,
+              const std::string& exec_app_path, const std::string& paras,
+              const std::string& hcfile, const std::string& hfile,
+              uint32_t nodes, uint32_t ppn, bool force)
+            : m_unique_id(unique_id), m_username(username),
+              m_exec_app_path(exec_app_path), m_paras(paras), m_hcfile(hcfile),
+              m_hfile(hfile), m_nodes(nodes), m_ppn(ppn), m_force(force) {}
+
+        input(input&& rhs) = default;
+
+        input(const input& other) = default;
+
+        input&
+        operator=(input&& rhs) = default;
+
+        input&
+        operator=(const input& other) = default;
+
+        explicit input(const rpc_registry_register_mallea_in_t& other)
+            : m_unique_id(other.unique_id), m_username(other.username),
+              m_exec_app_path(other.exec_app_path), m_paras(other.paras),
+              m_hcfile(other.hcfile), m_hfile(other.hfile),
+              m_nodes(other.nodes), m_ppn(other.ppn), m_force(other.force) {}
+
+        explicit operator rpc_registry_register_mallea_in_t() {
+            return {m_unique_id.c_str(), m_username.c_str(),
+                    m_exec_app_path.c_str(), m_paras.c_str(),
+                    m_hcfile.c_str(), m_hfile.c_str(), m_nodes, m_ppn,
+                    m_force};
+        }
+
+        std::string
+        unique_id() const {
+            return m_unique_id;
+        }
+
+        std::string
+        username() const {
+            return m_username;
+        }
+
+        std::string
+        exec_app_path() const {
+            return m_exec_app_path;
+        }
+
+        std::string
+        paras() const {
+            return m_paras;
+        }
+
+        std::string
+        hcfile() const {
+            return m_hcfile;
+        }
+
+        std::string
+        hfile() const {
+            return m_hfile;
+        }
+
+        uint32_t
+        nodes() const {
+            return m_nodes;
+        }
+
+        uint32_t
+        ppn() const {
+            return m_ppn;
+        }
+
+        bool
+        force() const {
+            return m_force;
+        }
+
+    private:
+        std::string m_unique_id;
+        std::string m_username;
+        std::string m_exec_app_path;
+        std::string m_paras;
+        std::string m_hcfile;
+        std::string m_hfile;
+        uint32_t m_nodes;
+        uint32_t m_ppn;
+        bool m_force;
+    };
+
+    class output {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        output()
+            : m_err() {}
+
+        output(int32_t err)
+            : m_err(err) {}
+
+        output(output&& rhs) = default;
+
+        output(const output& other) = default;
+
+        output&
+        operator=(output&& rhs) = default;
+
+        output&
+        operator=(const output& other) = default;
+
+        explicit output(const rpc_err_out_t& out) {
+            m_err = out.err;
+        }
+
+        int32_t
+        err() const {
+            return m_err;
+        }
+
+    private:
+        int32_t m_err;
+    };
+};
+
+struct registry_query_mallea {
+
+    class input;
+
+    class output;
+
+    using self_type = registry_query_mallea;
+    using handle_type = hermes::rpc_handle<self_type>;
+    using input_type = input;
+    using output_type = output;
+    using mercury_input_type = rpc_registry_query_mallea_in_t;
+    using mercury_output_type = rpc_registry_query_mallea_out_t;
+
+    constexpr static const uint64_t public_id = 23;
+
+    constexpr static const hg_id_t mercury_id = 0;
+
+    constexpr static const auto name = gkfs::rpc::tag::registry_query_mallea;
+
+    constexpr static const auto requires_response = true;
+
+    constexpr static const auto mercury_in_proc_cb =
+            HG_GEN_PROC_NAME(rpc_registry_query_mallea_in_t);
+
+    constexpr static const auto mercury_out_proc_cb =
+            HG_GEN_PROC_NAME(rpc_registry_query_mallea_out_t);
+
+    class input {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        input() = default;
+
+        explicit input(const rpc_registry_query_mallea_in_t&) {}
+
+        explicit operator rpc_registry_query_mallea_in_t() {
+            return {0};
+        }
+    };
+
+    class output {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        output() : m_err(), m_db_val() {}
+
+        output(int32_t err, const std::string& db_val)
+            : m_err(err), m_db_val(db_val) {}
+
+        explicit output(const rpc_registry_query_mallea_out_t& out) {
+            m_err = out.err;
+            if(out.db_val != nullptr) {
+                m_db_val = out.db_val;
+            }
+        }
+
+        int32_t
+        err() const {
+            return m_err;
+        }
+
+        std::string
+        db_val() const {
+            return m_db_val;
+        }
+
+    private:
+        int32_t m_err;
+        std::string m_db_val;
+    };
+};
+
+struct registry_unregister_mallea {
+
+    class input;
+
+    class output;
+
+    using self_type = registry_unregister_mallea;
+    using handle_type = hermes::rpc_handle<self_type>;
+    using input_type = input;
+    using output_type = output;
+    using mercury_input_type = rpc_registry_unregister_mallea_in_t;
+    using mercury_output_type = rpc_err_out_t;
+
+    constexpr static const uint64_t public_id = 24;
+
+    constexpr static const hg_id_t mercury_id = 0;
+
+    constexpr static const auto name = gkfs::rpc::tag::registry_unregister_mallea;
+
+    constexpr static const auto requires_response = true;
+
+    constexpr static const auto mercury_in_proc_cb =
+            HG_GEN_PROC_NAME(rpc_registry_unregister_mallea_in_t);
+
+    constexpr static const auto mercury_out_proc_cb =
+            HG_GEN_PROC_NAME(rpc_err_out_t);
+
+    class input {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        explicit input(const std::string& unique_id) : m_unique_id(unique_id) {}
+
+        explicit input(const rpc_registry_unregister_mallea_in_t& other)
+            : m_unique_id(other.unique_id) {}
+
+        explicit operator rpc_registry_unregister_mallea_in_t() {
+            return {m_unique_id.c_str()};
+        }
+
+        std::string
+        unique_id() const {
+            return m_unique_id;
+        }
+
+    private:
+        std::string m_unique_id;
+    };
+
+    class output {
+
+        template <typename ExecutionContext>
+        friend hg_return_t
+        hermes::detail::post_to_mercury(ExecutionContext*);
+
+    public:
+        output() : m_err() {}
+
+        explicit output(int32_t err) : m_err(err) {}
+
+        explicit output(const rpc_err_out_t& out) {
+            m_err = out.err;
+        }
+
+        int32_t
+        err() const {
+            return m_err;
+        }
+
+    private:
+        int32_t m_err;
+    };
+};
+
 struct stage {
 
     // forward declarations of public input/output types for this RPC
@@ -767,9 +1082,10 @@ struct stage_metadata {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const std::string& path, const mode_t mode, const size_t size, 
-            const int flag)
-            : m_path(path), m_mode(mode), m_size(size), m_flag(flag){}
+        input(const std::string& path, const mode_t mode, const size_t size,
+              const int flag, const std::string& unique_id)
+            : m_path(path), m_mode(mode), m_size(size), m_flag(flag),
+              m_unique_id(unique_id) {}
 
         input(input&& rhs) = default;
 
@@ -782,12 +1098,14 @@ struct stage_metadata {
         operator=(const input& other) = default;
 
         explicit input(const rpc_stage_metadata_in_t& other)
-            : m_path(other.path), m_mode(other.mode), m_size(other.size), 
-                m_flag(other.flag){}
+            : m_path(other.path), m_mode(other.mode), m_size(other.size),
+              m_flag(other.flag),
+              m_unique_id(other.unique_id != nullptr ? other.unique_id : "") {}
 
 
         explicit operator rpc_stage_metadata_in_t() {
-            return { m_path.c_str(), m_mode, m_size, m_flag };
+            return {m_path.c_str(), m_mode, m_size, m_flag,
+                    m_unique_id.c_str()};
         }
 
         std::string
@@ -810,11 +1128,17 @@ struct stage_metadata {
             return m_flag;
         }
 
+        std::string
+        unique_id() const {
+            return m_unique_id;
+        }
+
     private:
         std::string m_path;
         mode_t m_mode;
         size_t m_size;
         int m_flag;
+        std::string m_unique_id;
     };
 
     class output {
@@ -878,7 +1202,7 @@ struct create {
     using input_type = input;
     using output_type = output;
     using mercury_input_type = rpc_mk_node_in_t;
-    using mercury_output_type = rpc_err_out_t;
+    using mercury_output_type = rpc_mk_node_out_t;
 
     // RPC public identifier
     // (N.B: we reuse the same IDs assigned by Margo so that the daemon
@@ -900,7 +1224,7 @@ struct create {
 
     // Mercury callback to serialize output arguments
     constexpr static const auto mercury_out_proc_cb =
-            HG_GEN_PROC_NAME(rpc_err_out_t);
+            HG_GEN_PROC_NAME(rpc_mk_node_out_t);
 
     class input {
 
@@ -951,9 +1275,10 @@ struct create {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        output() : m_err() {}
+        output() : m_err(), m_latest_version_epoch() {}
 
-        output(int32_t err) : m_err(err) {}
+        output(int32_t err, uint64_t latest_version_epoch)
+            : m_err(err), m_latest_version_epoch(latest_version_epoch) {}
 
         output(output&& rhs) = default;
 
@@ -965,8 +1290,9 @@ struct create {
         output&
         operator=(const output& other) = default;
 
-        explicit output(const rpc_err_out_t& out) {
+        explicit output(const rpc_mk_node_out_t& out) {
             m_err = out.err;
+            m_latest_version_epoch = out.latest_version_epoch;
         }
 
         int32_t
@@ -974,8 +1300,14 @@ struct create {
             return m_err;
         }
 
+        uint64_t
+        latest_version_epoch() const {
+            return m_latest_version_epoch;
+        }
+
     private:
         int32_t m_err;
+        uint64_t m_latest_version_epoch;
     };
 };
 
@@ -993,7 +1325,7 @@ struct stat {
     using handle_type = hermes::rpc_handle<self_type>;
     using input_type = input;
     using output_type = output;
-    using mercury_input_type = rpc_path_only_in_t;
+    using mercury_input_type = rpc_stat_in_t;
     using mercury_output_type = rpc_stat_out_t;
 
     // RPC public identifier
@@ -1012,7 +1344,7 @@ struct stat {
 
     // Mercury callback to serialize input arguments
     constexpr static const auto mercury_in_proc_cb =
-            HG_GEN_PROC_NAME(rpc_path_only_in_t);
+            HG_GEN_PROC_NAME(rpc_stat_in_t);
 
     // Mercury callback to serialize output arguments
     constexpr static const auto mercury_out_proc_cb =
@@ -1025,7 +1357,8 @@ struct stat {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const std::string& path) : m_path(path) {}
+        input(const std::string& path, bool update_layout = false)
+            : m_path(path), m_update_layout(update_layout) {}
 
         input(input&& rhs) = default;
 
@@ -1042,14 +1375,21 @@ struct stat {
             return m_path;
         }
 
-        explicit input(const rpc_path_only_in_t& other) : m_path(other.path) {}
+        bool
+        update_layout() const {
+            return m_update_layout;
+        }
 
-        explicit operator rpc_path_only_in_t() {
-            return {m_path.c_str()};
+        explicit input(const rpc_stat_in_t& other)
+            : m_path(other.path), m_update_layout(other.update_layout) {}
+
+        explicit operator rpc_stat_in_t() {
+            return {m_path.c_str(), m_update_layout};
         }
 
     private:
         std::string m_path;
+        bool m_update_layout;
     };
 
     class output {
@@ -1059,10 +1399,14 @@ struct stat {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        output() : m_err(), m_db_val() {}
+        output()
+            : m_err(), m_db_val(), m_latest_version_epoch(), m_file_layout() {}
 
-        output(int32_t err, const std::string& db_val)
-            : m_err(err), m_db_val(db_val) {}
+        output(int32_t err, const std::string& db_val,
+               uint64_t latest_version_epoch, const std::string& file_layout)
+            : m_err(err), m_db_val(db_val),
+              m_latest_version_epoch(latest_version_epoch),
+              m_file_layout(file_layout) {}
 
         output(output&& rhs) = default;
 
@@ -1080,6 +1424,10 @@ struct stat {
             if(out.db_val != nullptr) {
                 m_db_val = out.db_val;
             }
+            m_latest_version_epoch = out.latest_version_epoch;
+            if(out.file_layout != nullptr) {
+                m_file_layout = out.file_layout;
+            }
         }
 
         int32_t
@@ -1092,9 +1440,21 @@ struct stat {
             return m_db_val;
         }
 
+        uint64_t
+        latest_version_epoch() const {
+            return m_latest_version_epoch;
+        }
+
+        std::string
+        file_layout() const {
+            return m_file_layout;
+        }
+
     private:
         int32_t m_err;
         std::string m_db_val;
+        uint64_t m_latest_version_epoch;
+        std::string m_file_layout;
     };
 };
 
@@ -1144,7 +1504,8 @@ struct remove_metadata {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const std::string& path) : m_path(path) {}
+        input(const std::string& path, const std::string& unique_id)
+            : m_path(path), m_unique_id(unique_id) {}
 
         input(input&& rhs) = default;
 
@@ -1161,14 +1522,22 @@ struct remove_metadata {
             return m_path;
         }
 
-        explicit input(const rpc_rm_node_in_t& other) : m_path(other.path) {}
+        explicit input(const rpc_rm_node_in_t& other)
+            : m_path(other.path),
+              m_unique_id(other.unique_id != nullptr ? other.unique_id : "") {}
 
         explicit operator rpc_rm_node_in_t() {
-            return {m_path.c_str()};
+            return {m_path.c_str(), m_unique_id.c_str()};
+        }
+
+        std::string
+        unique_id() const {
+            return m_unique_id;
         }
 
     private:
         std::string m_path;
+        std::string m_unique_id;
     };
 
     class output {
@@ -1295,7 +1664,7 @@ struct decr_size {
             : m_path(other.path), m_length(other.length) {}
 
         explicit operator rpc_trunc_in_t() {
-            return {m_path.c_str(), m_length};
+            return {m_path.c_str(), m_length, ""};
         }
 
     private:
@@ -1727,8 +2096,9 @@ struct update_metadentry_size {
 
     public:
         input(const std::string& path, uint64_t size, int64_t offset,
-              bool append)
-            : m_path(path), m_size(size), m_offset(offset), m_append(append) {}
+              bool append, uint64_t latest_version_epoch)
+            : m_path(path), m_size(size), m_offset(offset), m_append(append),
+              m_latest_version_epoch(latest_version_epoch) {}
 
         input(input&& rhs) = default;
 
@@ -1760,12 +2130,19 @@ struct update_metadentry_size {
             return m_append;
         }
 
+        uint64_t
+        latest_version_epoch() const {
+            return m_latest_version_epoch;
+        }
+
         explicit input(const rpc_update_metadentry_size_in_t& other)
             : m_path(other.path), m_size(other.size), m_offset(other.offset),
-              m_append(other.append) {}
+              m_append(other.append),
+              m_latest_version_epoch(other.latest_version_epoch) {}
 
         explicit operator rpc_update_metadentry_size_in_t() {
-            return {m_path.c_str(), m_size, m_offset, m_append};
+            return {m_path.c_str(), m_size, m_offset, m_append,
+                    m_latest_version_epoch};
         }
 
     private:
@@ -1773,6 +2150,7 @@ struct update_metadentry_size {
         uint64_t m_size;
         int64_t m_offset;
         bool m_append;
+        uint64_t m_latest_version_epoch;
     };
 
     class output {
@@ -1782,10 +2160,15 @@ struct update_metadentry_size {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        output() : m_err(), m_ret_offset() {}
+        output()
+            : m_err(), m_ret_offset(), m_latest_version_epoch(),
+              m_file_layout() {}
 
-        output(int32_t err, int64_t ret_size)
-            : m_err(err), m_ret_offset(ret_size) {}
+        output(int32_t err, int64_t ret_size, uint64_t latest_version_epoch,
+               const std::string& file_layout)
+            : m_err(err), m_ret_offset(ret_size),
+              m_latest_version_epoch(latest_version_epoch),
+              m_file_layout(file_layout) {}
 
         output(output&& rhs) = default;
 
@@ -1800,6 +2183,10 @@ struct update_metadentry_size {
         explicit output(const rpc_update_metadentry_size_out_t& out) {
             m_err = out.err;
             m_ret_offset = out.ret_offset;
+            m_latest_version_epoch = out.latest_version_epoch;
+            if(out.file_layout != nullptr) {
+                m_file_layout = out.file_layout;
+            }
         }
 
         int32_t
@@ -1812,9 +2199,21 @@ struct update_metadentry_size {
             return m_ret_offset;
         }
 
+        uint64_t
+        latest_version_epoch() const {
+            return m_latest_version_epoch;
+        }
+
+        std::string
+        file_layout() const {
+            return m_file_layout;
+        }
+
     private:
         int32_t m_err;
         int64_t m_ret_offset;
+        uint64_t m_latest_version_epoch;
+        std::string m_file_layout;
     };
 };
 
@@ -1984,7 +2383,8 @@ struct remove_data {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const std::string& path) : m_path(path) {}
+        input(const std::string& path, const std::string& unique_id)
+            : m_path(path), m_unique_id(unique_id) {}
 
         input(input&& rhs) = default;
 
@@ -2001,14 +2401,22 @@ struct remove_data {
             return m_path;
         }
 
-        explicit input(const rpc_rm_node_in_t& other) : m_path(other.path) {}
+        explicit input(const rpc_rm_node_in_t& other)
+            : m_path(other.path),
+              m_unique_id(other.unique_id != nullptr ? other.unique_id : "") {}
 
         explicit operator rpc_rm_node_in_t() {
-            return {m_path.c_str()};
+            return {m_path.c_str(), m_unique_id.c_str()};
+        }
+
+        std::string
+        unique_id() const {
+            return m_unique_id;
         }
 
     private:
         std::string m_path;
+        std::string m_unique_id;
     };
 
     class output {
@@ -2095,11 +2503,14 @@ struct write_data {
         input(const std::string& path, int64_t offset, uint64_t host_id,
               uint64_t host_size, const std::string& wbitset, uint64_t chunk_n,
               uint64_t chunk_start, uint64_t chunk_end,
-              uint64_t total_chunk_size, const hermes::exposed_memory& buffers)
+              uint64_t total_chunk_size, const hermes::exposed_memory& buffers,
+              uint64_t latest_version_epoch, const std::string& unique_id)
             : m_path(path), m_offset(offset), m_host_id(host_id),
               m_host_size(host_size), m_wbitset(wbitset), m_chunk_n(chunk_n),
               m_chunk_start(chunk_start), m_chunk_end(chunk_end),
-              m_total_chunk_size(total_chunk_size), m_buffers(buffers) {}
+              m_total_chunk_size(total_chunk_size), m_buffers(buffers),
+              m_latest_version_epoch(latest_version_epoch),
+              m_unique_id(unique_id) {}
 
         input(input&& rhs) = default;
 
@@ -2167,13 +2578,26 @@ struct write_data {
               m_wbitset(other.wbitset), m_chunk_n(other.chunk_n),
               m_chunk_start(other.chunk_start), m_chunk_end(other.chunk_end),
               m_total_chunk_size(other.total_chunk_size),
-              m_buffers(other.bulk_handle) {}
+              m_buffers(other.bulk_handle),
+              m_latest_version_epoch(other.latest_version_epoch),
+              m_unique_id(other.unique_id) {}
+
+        uint64_t
+        latest_version_epoch() const {
+            return m_latest_version_epoch;
+        }
+
+        std::string
+        unique_id() const {
+            return m_unique_id;
+        }
 
         explicit operator rpc_write_data_in_t() {
             return {m_path.c_str(),      m_offset,          m_host_id,
                     m_host_size,         m_wbitset.c_str(), m_chunk_n,
                     m_chunk_start,       m_chunk_end,       m_total_chunk_size,
-                    hg_bulk_t(m_buffers)};
+                    hg_bulk_t(m_buffers), m_latest_version_epoch,
+                    m_unique_id.c_str()};
         }
 
     private:
@@ -2187,6 +2611,8 @@ struct write_data {
         uint64_t m_chunk_end;
         uint64_t m_total_chunk_size;
         hermes::exposed_memory m_buffers;
+        uint64_t m_latest_version_epoch;
+        std::string m_unique_id;
     };
 
     class output {
@@ -2280,11 +2706,14 @@ struct read_data {
         input(const std::string& path, int64_t offset, uint64_t host_id,
               uint64_t host_size, const std::string& wbitset, uint64_t chunk_n,
               uint64_t chunk_start, uint64_t chunk_end,
-              uint64_t total_chunk_size, const hermes::exposed_memory& buffers)
+              uint64_t total_chunk_size, const hermes::exposed_memory& buffers,
+              uint64_t latest_version_epoch, const std::string& unique_id)
             : m_path(path), m_offset(offset), m_host_id(host_id),
               m_host_size(host_size), m_wbitset(wbitset), m_chunk_n(chunk_n),
               m_chunk_start(chunk_start), m_chunk_end(chunk_end),
-              m_total_chunk_size(total_chunk_size), m_buffers(buffers) {}
+              m_total_chunk_size(total_chunk_size), m_buffers(buffers),
+              m_latest_version_epoch(latest_version_epoch),
+              m_unique_id(unique_id) {}
 
         input(input&& rhs) = default;
 
@@ -2352,13 +2781,26 @@ struct read_data {
               m_wbitset(other.wbitset), m_chunk_n(other.chunk_n),
               m_chunk_start(other.chunk_start), m_chunk_end(other.chunk_end),
               m_total_chunk_size(other.total_chunk_size),
-              m_buffers(other.bulk_handle) {}
+              m_buffers(other.bulk_handle),
+              m_latest_version_epoch(other.latest_version_epoch),
+              m_unique_id(other.unique_id) {}
+
+        uint64_t
+        latest_version_epoch() const {
+            return m_latest_version_epoch;
+        }
+
+        std::string
+        unique_id() const {
+            return m_unique_id;
+        }
 
         explicit operator rpc_read_data_in_t() {
             return {m_path.c_str(),      m_offset,          m_host_id,
                     m_host_size,         m_wbitset.c_str(), m_chunk_n,
                     m_chunk_start,       m_chunk_end,       m_total_chunk_size,
-                    hg_bulk_t(m_buffers)};
+                    hg_bulk_t(m_buffers), m_latest_version_epoch,
+                    m_unique_id.c_str()};
         }
 
     private:
@@ -2372,6 +2814,8 @@ struct read_data {
         uint64_t m_chunk_end;
         uint64_t m_total_chunk_size;
         hermes::exposed_memory m_buffers;
+        uint64_t m_latest_version_epoch;
+        std::string m_unique_id;
     };
 
     class output {
@@ -2462,8 +2906,9 @@ struct trunc_data {
         hermes::detail::post_to_mercury(ExecutionContext*);
 
     public:
-        input(const std::string& path, uint64_t length)
-            : m_path(path), m_length(length) {}
+        input(const std::string& path, uint64_t length,
+              const std::string& unique_id)
+            : m_path(path), m_length(length), m_unique_id(unique_id) {}
 
         input(input&& rhs) = default;
 
@@ -2486,18 +2931,22 @@ struct trunc_data {
         }
 
         explicit input(const rpc_trunc_in_t& other)
-            : m_path(other.path), m_length(other.length) {}
+            : m_path(other.path), m_length(other.length),
+              m_unique_id(other.unique_id != nullptr ? other.unique_id : "") {}
 
         explicit operator rpc_trunc_in_t() {
-            return {
-                    m_path.c_str(),
-                    m_length,
-            };
+            return {m_path.c_str(), m_length, m_unique_id.c_str()};
+        }
+
+        std::string
+        unique_id() const {
+            return m_unique_id;
         }
 
     private:
         std::string m_path;
         uint64_t m_length;
+        std::string m_unique_id;
     };
 
     class output {

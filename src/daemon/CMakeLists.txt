@@ -40,6 +40,7 @@ target_sources(
   gkfs_daemon
   PRIVATE daemon.cpp
           handler/srv_data.cpp
+          malleability_logger.cpp
           ../common/rpc/rpc_util.cpp
           util.cpp
           ops/metadentry.cpp
@@ -63,6 +64,7 @@ target_link_libraries(
          storage
          distributor
          statistics
+         malleability_logger
          log_util
          env_util
          path_util
@@ -104,6 +106,7 @@ if(GKFS_ENABLE_FORWARDING)
             handler/srv_metadata.cpp
             handler/srv_management.cpp
             handler/srv_data.cpp
+            malleability_logger.cpp
   )
 
   target_compile_definitions(gkfwd_daemon PUBLIC GKFS_ENABLE_FORWARDING)
@@ -115,6 +118,7 @@ if(GKFS_ENABLE_FORWARDING)
            storage
            distributor
            statistics
+           malleability_logger
            log_util
            env_util
            path_util

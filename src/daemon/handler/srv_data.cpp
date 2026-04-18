@@ -37,7 +37,11 @@
 #include <daemon/handler/rpc_defs.hpp>
 #include <daemon/handler/rpc_util.hpp>
 #include <daemon/backend/data/chunk_storage.hpp>
+#include <daemon/malleability_logger.hpp>
 #include <daemon/ops/data.hpp>
+
+#include <cstdint>
+#include <utility>
 
 #include <common/rpc/rpc_types.hpp>
 #include <common/rpc/rpc_util.hpp>
@@ -58,6 +62,36 @@ using namespace std;
 namespace {
 namespace cfg = gkfs::config::rpc;
 using gkfs::utils::arithmetic::last_smaller_equal;
+
+class ScopedMalleabilityIoLog {
+public:
+    ScopedMalleabilityIoLog(
+            gkfs::daemon::malleability::PendingIoLog entry,
+            const rpc_data_out_t& out, const std::uint64_t& processed_chunks)
+        : entry_(std::move(entry)), out_(out),
+          processed_chunks_(processed_chunks) {}
+
+    ~ScopedMalleabilityIoLog() noexcept {
+        try {
+            const auto final_offset = entry_.offset;
+            const auto actual_size = static_cast<ssize_t>(out_.io_size);
+            gkfs::daemon::malleability::finish_io(
+                    std::move(entry_), final_offset, actual_size, out_.err,
+                    processed_chunks_);
+        } catch(...) {
+        }
+    }
+
+    ScopedMalleabilityIoLog(const ScopedMalleabilityIoLog&) = delete;
+    ScopedMalleabilityIoLog&
+    operator=(const ScopedMalleabilityIoLog&) = delete;
+
+private:
+    gkfs::daemon::malleability::PendingIoLog entry_;
+    const rpc_data_out_t& out_;
+    const std::uint64_t& processed_chunks_;
+};
+
 /**
  * @brief Serves a write request transferring the chunks associated with this
  * daemon and store them on the node-local FS.
@@ -113,9 +147,17 @@ rpc_srv_write(hg_handle_t handle) {
     auto mid = margo_hg_handle_get_instance(handle);
     auto bulk_size = margo_bulk_get_size(in.bulk_handle);
     GKFS_DATA->spdlogger()->debug(
-            "{}() path: '{}' chunk_start '{}' chunk_end '{}' chunk_n '{}' total_chunk_size '{}' bulk_size: '{}' offset: '{}'",
+            "{}() path: '{}' chunk_start '{}' chunk_end '{}' chunk_n '{}' total_chunk_size '{}' bulk_size: '{}' offset: '{}' latest_version_epoch: '{}'",
             __func__, in.path, in.chunk_start, in.chunk_end, in.chunk_n,
-            in.total_chunk_size, bulk_size, in.offset);
+            in.total_chunk_size, bulk_size, in.offset, in.latest_version_epoch);
+    const std::string unique_id =
+            in.unique_id != nullptr ? in.unique_id : "";
+    std::uint64_t processed_chunks = 0;
+    ScopedMalleabilityIoLog malleability_log{
+            gkfs::daemon::malleability::start_io(
+                    "srv_write", in.path, in.offset, in.total_chunk_size,
+                    unique_id),
+            out, processed_chunks};
 
     std::vector<uint8_t> write_ops_vect =
             gkfs::rpc::decompress_bitset(in.wbitset);
@@ -226,7 +268,7 @@ rpc_srv_write(hg_handle_t handle) {
     uint64_t origin_offset;
     uint64_t local_offset;
     // object for asynchronous disk IO
-    gkfs::data::ChunkWriteOperation chunk_op{in.path, in.chunk_n};
+    gkfs::data::ChunkWriteOperation chunk_op{in.path, unique_id, in.chunk_n};
 
     /*
      * 3. Calculate chunk sizes that correspond to this host, transfer data, and
@@ -353,6 +395,7 @@ rpc_srv_write(hg_handle_t handle) {
         }
         // next chunk
         chnk_id_curr++;
+        processed_chunks = chnk_id_curr;
     }
     // Sanity check that all chunks where detected in previous loop
     // TODO don't proceed if that happens.
@@ -444,9 +487,17 @@ rpc_srv_read(hg_handle_t handle) {
     auto bulk_size = margo_bulk_get_size(in.bulk_handle);
 
     GKFS_DATA->spdlogger()->debug(
-            "{}() path: '{}' chunk_start '{}' chunk_end '{}' chunk_n '{}' total_chunk_size '{}' bulk_size: '{}' offset: '{}'",
+            "{}() path: '{}' chunk_start '{}' chunk_end '{}' chunk_n '{}' total_chunk_size '{}' bulk_size: '{}' offset: '{}' latest_version_epoch: '{}'",
             __func__, in.path, in.chunk_start, in.chunk_end, in.chunk_n,
-            in.total_chunk_size, bulk_size, in.offset);    
+            in.total_chunk_size, bulk_size, in.offset, in.latest_version_epoch);
+    const std::string unique_id =
+            in.unique_id != nullptr ? in.unique_id : "";
+    std::uint64_t processed_chunks = 0;
+    ScopedMalleabilityIoLog malleability_log{
+            gkfs::daemon::malleability::start_io(
+                    "srv_read", in.path, in.offset, in.total_chunk_size,
+                    unique_id),
+            out, processed_chunks};
     std::vector<uint8_t> read_bitset_vect =
             gkfs::rpc::decompress_bitset(in.wbitset);
 #ifdef GKFS_ENABLE_AGIOS
@@ -545,7 +596,8 @@ rpc_srv_read(hg_handle_t handle) {
     uint64_t chunksize = gkfs::config::rpc::chunksize;
     /* --PFL implementation-- */
     // object for asynchronous disk IO
-    gkfs::data::ChunkReadOperation chunk_read_op{in.path, in.chunk_n};
+    gkfs::data::ChunkReadOperation chunk_read_op{in.path, unique_id,
+                                                 in.chunk_n};
     /*
      * 3. Calculate chunk sizes that correspond to this host and start tasks to
      * read from disk
@@ -649,6 +701,7 @@ rpc_srv_read(hg_handle_t handle) {
             return gkfs::rpc::cleanup_respond(&handle, &in, &out, &bulk_handle);
         }
         chnk_id_curr++;
+        processed_chunks = chnk_id_curr;
     }
     // Sanity check that all chunks where detected in previous loop
     // TODO error out. If we continue this will crash the server when sending
@@ -719,8 +772,10 @@ rpc_srv_truncate(hg_handle_t handle) {
     }
     GKFS_DATA->spdlogger()->debug("{}() path: '{}', length: '{}'", __func__,
                                   in.path, in.length);
+    const std::string unique_id =
+            in.unique_id != nullptr ? in.unique_id : "";
 
-    gkfs::data::ChunkTruncateOperation chunk_op{in.path};
+    gkfs::data::ChunkTruncateOperation chunk_op{in.path, unique_id};
     try {
         // start tasklet for truncate operation
         chunk_op.truncate(in.length);

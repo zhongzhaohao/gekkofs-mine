@@ -6,6 +6,7 @@
 #ifndef GKFS_REGISTER_UTIL_HPP
 #define GKFS_REGISTER_UTIL_HPP
 
+#include <cstdint>
 #include <string>
 
 namespace gkfs::registers {
@@ -30,6 +31,23 @@ int
 register_registry(const std::string& workflow,
                   const std::string& hostconfigfile,
                   const std::string& hostfile);
+
+int
+register_registry_mallea(const std::string& unique_id,
+                         const std::string& username,
+                         const std::string& exec_app_path,
+                         const std::string& paras,
+                         const std::string& hostconfigfile,
+                         const std::string& hostfile,
+                         uint32_t nodes,
+                         uint32_t ppn,
+                         bool force);
+
+int
+query_registry_mallea(const std::string& output_path);
+
+int
+unregister_registry_mallea(const std::string& unique_id);
 
 } // namespace gkfs::registers
 

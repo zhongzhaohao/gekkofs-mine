@@ -39,13 +39,113 @@
 #include <daemon/backend/metadata/db.hpp>
 #include <daemon/backend/data/chunk_storage.hpp>
 #include <daemon/ops/metadentry.hpp>
+#include <cstdint>
 #include <common/bloom_filter.hpp>
+#include <common/arithmetic/arithmetic.hpp>
 #include <common/rpc/rpc_types.hpp>
+#include <common/file_layout.hpp>
 #include <common/statistics/stats.hpp>
 #include <iostream>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 using namespace std;
 
 namespace {
+
+gkfs::file_layout::chunk_id_t
+next_layout_chunk(size_t file_size) {
+    if(file_size == 0) {
+        return 0;
+    }
+
+    return gkfs::utils::arithmetic::block_index(
+                   file_size - 1, gkfs::config::rpc::chunksize) +
+           1;
+}
+
+bool
+refresh_file_layout_if_stale(const std::string& path,
+                             std::uint64_t client_latest_version_epoch,
+                             std::string& serialized_layout,
+                             std::uint64_t& layout_epoch) {
+    const auto daemon_epoch = GKFS_DATA->epoch();
+    serialized_layout = "";
+    layout_epoch = 0;
+    if(daemon_epoch > client_latest_version_epoch) {
+        auto& layout_record = GKFS_DATA->file_layouts()[path];
+        if(!layout_record) {
+            layout_record =
+                    std::make_shared<gkfs::file_layout::FileLayoutRecord>();
+        }
+
+        std::lock_guard lock(layout_record->mutex);
+        auto snapshot =
+                gkfs::file_layout::load_file_layout_snapshot(layout_record);
+        const auto record_epoch =
+                snapshot ? snapshot->latest_version_epoch : 0;
+
+        if(daemon_epoch > record_epoch) {
+            const auto metadata_size = gkfs::metadata::get_size(path);
+            const auto start_chunk = next_layout_chunk(metadata_size);
+
+            auto next_snapshot =
+                    std::make_shared<gkfs::file_layout::FileLayoutSnapshot>();
+            if(snapshot) {
+                next_snapshot->layout = snapshot->layout;
+            }
+            next_snapshot->layout.append(start_chunk, daemon_epoch);
+            next_snapshot->latest_version_epoch = daemon_epoch;
+            next_snapshot->serialized_layout = next_snapshot->layout.serialize();
+
+            gkfs::file_layout::FileLayoutSnapshotPtr published_snapshot =
+                    next_snapshot;
+            std::atomic_store_explicit(&layout_record->snapshot,
+                                       published_snapshot,
+                                       std::memory_order_release);
+            snapshot = published_snapshot;
+            GKFS_DATA->spdlogger()->info(
+                    "{}() refreshed file layout for '{}' at chunk '{}' with daemon epoch '{}'",
+                    __func__, path, start_chunk, daemon_epoch);
+        }
+        if(snapshot) {
+            serialized_layout = snapshot->serialized_layout;
+            layout_epoch = snapshot->latest_version_epoch;
+        }
+    }
+
+    return true;
+}
+
+void
+truncate_file_layout(const std::string& path, size_t file_size) {
+    auto& layouts = GKFS_DATA->file_layouts();
+    const auto layout_it = layouts.find(path);
+    if(layout_it == layouts.end() || !layout_it->second) {
+        return;
+    }
+
+    auto& layout_record = layout_it->second;
+    std::lock_guard lock(layout_record->mutex);
+    const auto snapshot =
+            gkfs::file_layout::load_file_layout_snapshot(layout_record);
+    if(!snapshot || snapshot->empty()) {
+        return;
+    }
+
+    auto next_snapshot =
+            std::make_shared<gkfs::file_layout::FileLayoutSnapshot>(*snapshot);
+    const auto first_removed_chunk =
+            file_size == 0 ? 0 : next_layout_chunk(file_size);
+    if(!next_snapshot->layout.truncate_from(first_removed_chunk)) {
+        return;
+    }
+
+    next_snapshot->serialized_layout = next_snapshot->layout.serialize();
+    gkfs::file_layout::FileLayoutSnapshotPtr published_snapshot = next_snapshot;
+    std::atomic_store_explicit(&layout_record->snapshot, published_snapshot,
+                               std::memory_order_release);
+}
 
 /**
  * @brief Serves a file/directory create request or returns an error to the
@@ -64,7 +164,9 @@ namespace {
 hg_return_t
 rpc_srv_create(hg_handle_t handle) {
     rpc_mk_node_in_t in;
-    rpc_err_out_t out;
+    rpc_mk_node_out_t out;
+    out.err = 0;
+    out.latest_version_epoch = 0;
 
     auto ret = margo_get_input(handle, &in);
     if(ret != HG_SUCCESS)
@@ -78,8 +180,19 @@ rpc_srv_create(hg_handle_t handle) {
         // create metadentry
         gkfs::metadata::create(in.path, md);
         out.err = 0;
-        std::string path(in.path);
-        GKFS_DATA->Bloom_filter().insert(path);
+        auto epoch = GKFS_DATA->epoch();
+
+        if(S_ISREG(in.mode)) {
+            auto& layouts = GKFS_DATA->file_layouts();
+            layouts[in.path] =
+                    gkfs::file_layout::make_file_layout_record(epoch, epoch);
+            out.latest_version_epoch = epoch;
+        }
+
+        if constexpr(gkfs::config::use_bloom) {
+            std::string path(in.path);
+            GKFS_DATA->Bloom_filter().insert(path);
+        }
     } catch(const gkfs::metadata::ExistsException& e) {
         out.err = EEXIST;
     } catch(const std::exception& e) {
@@ -120,8 +233,12 @@ rpc_srv_create(hg_handle_t handle) {
  */
 hg_return_t
 rpc_srv_stat(hg_handle_t handle) {
-    rpc_path_only_in_t in{};
+    rpc_stat_in_t in{};
     rpc_stat_out_t out{};
+    out.err = EIO;
+    out.db_val = "";
+    out.latest_version_epoch = 0;
+    out.file_layout = "";
     auto ret = margo_get_input(handle, &in);
     if(ret != HG_SUCCESS)
         GKFS_DATA->spdlogger()->error(
@@ -129,12 +246,31 @@ rpc_srv_stat(hg_handle_t handle) {
     assert(ret == HG_SUCCESS);
     GKFS_DATA->spdlogger()->debug("{}() path: '{}'", __func__, in.path);
     std::string val;
+    std::string serialized_layout;
 
     try {
         // get the metadata
         val = gkfs::metadata::get_str(in.path);
         out.db_val = val.c_str();
         out.err = 0;
+        if(in.update_layout == HG_TRUE) {
+            gkfs::metadata::Metadata md(val);
+            if(S_ISREG(md.mode())) {
+                const auto& layouts = GKFS_DATA->file_layouts();
+                const auto layout_it = layouts.find(in.path);
+                if(layout_it != layouts.end()) {
+                    const auto snapshot =
+                            gkfs::file_layout::load_file_layout_snapshot(
+                                    layout_it->second);
+                    if(snapshot && !snapshot->empty()) {
+                        serialized_layout = snapshot->serialized_layout;
+                        out.latest_version_epoch =
+                                snapshot->latest_version_epoch;
+                        out.file_layout = serialized_layout.c_str();
+                    }
+                }
+            }
+        }
         GKFS_DATA->spdlogger()->debug("{}() Sending output mode '{}'", __func__,
                                       out.db_val);
     } catch(const gkfs::metadata::NotFoundException& e) {
@@ -191,6 +327,7 @@ rpc_srv_decr_size(hg_handle_t handle) {
 
     try {
         GKFS_DATA->mdb()->decrease_size(in.path, in.length);
+        truncate_file_layout(in.path, in.length);
         out.err = 0;
     } catch(const std::exception& e) {
         GKFS_DATA->spdlogger()->error("{}() Failed to decrease size: '{}'",
@@ -242,6 +379,8 @@ rpc_srv_remove_metadata(hg_handle_t handle) {
     assert(ret == HG_SUCCESS);
     GKFS_DATA->spdlogger()->debug("{}() Got remove metadata RPC with path '{}'",
                                   __func__, in.path);
+    const std::string unique_id =
+            in.unique_id != nullptr ? in.unique_id : "";
 
     // Remove metadentry if exists on the node
     try {
@@ -250,9 +389,12 @@ rpc_srv_remove_metadata(hg_handle_t handle) {
         out.err = 0;
         out.mode = md.mode();
         out.size = md.size();
+        if(S_ISREG(md.mode())) {
+            GKFS_DATA->file_layouts().erase(in.path);
+        }
         if constexpr(gkfs::config::metadata::implicit_data_removal) {
             if(S_ISREG(md.mode()) && (md.size() != 0))
-                GKFS_DATA->storage()->destroy_chunk_space(in.path);
+                GKFS_DATA->storage()->destroy_chunk_space(in.path, unique_id);
         }
 
     } catch(const gkfs::metadata::DBException& e) {
@@ -310,10 +452,12 @@ rpc_srv_remove_data(hg_handle_t handle) {
     assert(ret == HG_SUCCESS);
     GKFS_DATA->spdlogger()->debug("{}() Got remove data RPC with path '{}'",
                                   __func__, in.path);
+    const std::string unique_id =
+            in.unique_id != nullptr ? in.unique_id : "";
 
     // Remove all chunks for that file
     try {
-        GKFS_DATA->storage()->destroy_chunk_space(in.path);
+        GKFS_DATA->storage()->destroy_chunk_space(in.path, unique_id);
         out.err = 0;
     } catch(const gkfs::data::ChunkStorageException& e) {
         GKFS_DATA->spdlogger()->error(
@@ -412,6 +556,11 @@ hg_return_t
 rpc_srv_update_metadentry_size(hg_handle_t handle) {
     rpc_update_metadentry_size_in_t in{};
     rpc_update_metadentry_size_out_t out{};
+    std::string serialized_layout;
+    out.err = EIO;
+    out.ret_offset = 0;
+    out.latest_version_epoch = 0;
+    out.file_layout = "";
 
     auto ret = margo_get_input(handle, &in);
     if(ret != HG_SUCCESS)
@@ -419,12 +568,17 @@ rpc_srv_update_metadentry_size(hg_handle_t handle) {
                 "{}() Failed to retrieve input from handle", __func__);
     assert(ret == HG_SUCCESS);
     GKFS_DATA->spdlogger()->debug(
-            "{}() path: '{}', size: '{}', offset: '{}', append: '{}'", __func__,
-            in.path, in.size, in.offset, in.append);
+            "{}() path: '{}', size: '{}', offset: '{}', append: '{}', latest_version_epoch: '{}'",
+            __func__, in.path, in.size, in.offset, in.append,
+            in.latest_version_epoch);
 
     try {
+        const std::string path = in.path;
+        refresh_file_layout_if_stale(path, in.latest_version_epoch,
+                                     serialized_layout, out.latest_version_epoch);
         out.ret_offset = gkfs::metadata::update_size(
                 in.path, in.size, in.offset, (in.append == HG_TRUE));
+        out.file_layout = serialized_layout.c_str();
         out.err = 0;
     } catch(const gkfs::metadata::NotFoundException& e) {
         GKFS_DATA->spdlogger()->debug("{}() Entry not found: '{}'", __func__,

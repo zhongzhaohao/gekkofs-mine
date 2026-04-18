@@ -32,12 +32,14 @@
 #include <client/preload_util.hpp>
 #include <client/logging.hpp>
 #include <client/gkfs_functions.hpp>
+#include <client/malleability_logger.hpp>
 #include <client/path.hpp>
 #include <client/open_dir.hpp>
 
 #include <common/path_util.hpp>
 
 #include <memory>
+#include <utility>
 
 extern "C" {
 #include <fcntl.h>
@@ -99,8 +101,18 @@ hook_close(int fd) {
     LOG(DEBUG, "{}() called with fd: {}", __func__, fd);
 
     if(CTX->file_map()->exist(fd)) {
+        auto open_file = CTX->file_map()->get(fd);
+        const auto path = open_file->path();
+        const auto type = open_file->type();
+        auto malleability_log =
+                gkfs::malleability::start_io("close", path, 0, 0);
         // No call to the daemon is required
         CTX->file_map()->remove(fd);
+        if(type == gkfs::filemap::FileType::regular &&
+           !CTX->file_map()->path_open(path, type)) {
+            CTX->file_layouts().erase(path);
+        }
+        gkfs::malleability::finish_io(std::move(malleability_log), 0, 0, 0);
         return 0;
     }
 

@@ -31,14 +31,18 @@
 #define GEKKOFS_PRELOAD_CTX_HPP
 
 #include <common/bloom_filter.hpp>
+#include <common/file_layout.hpp>
 #include <common/thread_pool.hpp>
 #include <common/fs_info.hpp>
 #include <hermes.hpp>
 #include <map>
 #include <mercury.h>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <config.hpp>
 
 #include <bitset>
@@ -108,15 +112,21 @@ private:
     std::vector<fs_info> hostsconfig_; // Host(Daemon) config of Each GekkoFS
     std::map<std::string, unsigned int> pathfs_; // Cache of GekkoFS id where path exists
     std::map<std::string, unsigned int> wrapper_pathfs_; // Cache of GekkoFS id where wrapper path exists
+    gkfs::file_layout::FileLayoutMap file_layouts_;
+    gkfs::file_layout::epoch_t file_layout_global_epoch_ = 0;
     uint64_t local_fs_id_; // Id of GekkoFS having local host(daemon)
     std::vector<bloom_filter> bloom_filter_vec_;  //bloom filter
     ThreadPool thread_pool_; // thread pool
     std::string workflow_;
+    std::string unique_id_;
     std::string mergeflows_;
     /* --Multiple GekkoFS-- */
 
     std::vector<hermes::endpoint> hosts_;
     std::vector<std::string> hosts_name_;
+    std::map<std::string, uint64_t> host_uri_to_index_;
+    std::map<gkfs::file_layout::epoch_t, std::vector<uint64_t>> epoch_hosts_;
+    mutable std::mutex hosts_mutex_;
     uint64_t local_host_id_;
     uint64_t fwd_host_id_;
     std::string rpc_protocol_;
@@ -173,6 +183,32 @@ public:
     void
     hosts_name(const std::vector<std::string>& hosts_name);
 
+    hermes::endpoint
+    host_endpoint(uint64_t host_id) const;
+
+    std::optional<uint64_t>
+    host_index_by_uri(const std::string& uri) const;
+
+    void
+    register_host_uri(const std::string& uri, uint64_t host_id);
+
+    uint64_t
+    append_host_if_absent(const std::string& hostname, const std::string& uri,
+                          const hermes::endpoint& endpoint);
+
+    bool
+    epoch_hosts_loaded(gkfs::file_layout::epoch_t epoch) const;
+
+    void
+    epoch_hosts(gkfs::file_layout::epoch_t epoch,
+                const std::vector<uint64_t>& hosts);
+
+    uint64_t
+    epoch_host(gkfs::file_layout::epoch_t epoch, uint64_t target) const;
+
+    std::size_t
+    epoch_hosts_size(gkfs::file_layout::epoch_t epoch) const;
+
     /* --Multiple GekkoFS-- */
     
     const hermes::endpoint
@@ -199,6 +235,18 @@ public:
     std::map<std::string, unsigned int>&
     wrapper_pathfs() ; 
 
+    gkfs::file_layout::FileLayoutMap&
+    file_layouts();
+
+    gkfs::file_layout::epoch_t
+    file_layout_latest_version_epoch(const std::string& path) const;
+
+    gkfs::file_layout::epoch_t
+    file_layout_global_epoch() const;
+
+    void
+    update_file_layout_global_epoch(gkfs::file_layout::epoch_t epoch);
+
     uint64_t
     local_fs_id() const;
 
@@ -219,6 +267,12 @@ public:
 
     void
     workflow(std::string workflow);
+
+    std::string
+    unique_id() const;
+
+    void
+    unique_id(std::string unique_id);
 
 
     std::string

@@ -121,6 +121,7 @@ class ChunkOperation {
 
 protected:
     const std::string path_; //!< Path to the chunk directory of the file
+    const std::string unique_id_; //!< Unique identifier for storage isolation
 
     std::vector<ABT_task> abt_tasks_; //!< Tasklets operating on the file
     std::vector<ABT_eventual>
@@ -131,15 +132,16 @@ public:
      * @brief Constructor for a single chunk operation.
      * @param path Path to chunk directory
      */
-    explicit ChunkOperation(const std::string& path)
-        : ChunkOperation(path, 1){};
+    ChunkOperation(const std::string& path, const std::string& unique_id)
+        : ChunkOperation(path, unique_id, 1){};
 
     /**
      * @brief Constructor to initialize tasklet and eventual lists.
      * @param path Path to chunk directory
      * @param n Number of chunk operations by I/O request
      */
-    ChunkOperation(std::string path, size_t n) : path_(std::move(path)) {
+    ChunkOperation(std::string path, std::string unique_id, size_t n)
+        : path_(std::move(path)), unique_id_(std::move(unique_id)) {
         // Knowing n beforehand is important and cannot be dynamic. Otherwise
         // eventuals cause seg faults
         abt_tasks_.resize(n);
@@ -188,6 +190,7 @@ class ChunkTruncateOperation : public ChunkOperation<ChunkTruncateOperation> {
 private:
     struct chunk_truncate_args {
         const std::string* path; //!< Path to affected chunk directory
+        const std::string* unique_id; //!< Unique identifier for storage bucket
         size_t size; //!< GekkoFS file offset (_NOT_ chunk file) to truncate to
         ABT_eventual eventual; //!< Attached eventual
     };                         //!< Struct for a truncate operation
@@ -207,7 +210,8 @@ private:
     clear_task_args();
 
 public:
-    explicit ChunkTruncateOperation(const std::string& path);
+    ChunkTruncateOperation(const std::string& path,
+                           const std::string& unique_id);
 
     ~ChunkTruncateOperation() = default;
 
@@ -238,6 +242,7 @@ class ChunkWriteOperation : public ChunkOperation<ChunkWriteOperation> {
 private:
     struct chunk_write_args {
         const std::string* path;      //!< Path to affected chunk directory
+        const std::string* unique_id; //!< Unique identifier for storage bucket
         const char* buf;              //!< Buffer for chunk
         gkfs::rpc::chnk_id_t chnk_id; //!< chunk id that is affected
         size_t size;                  //!< size to write for chunk
@@ -260,7 +265,8 @@ private:
     clear_task_args();
 
 public:
-    ChunkWriteOperation(const std::string& path, size_t n);
+    ChunkWriteOperation(const std::string& path, const std::string& unique_id,
+                        size_t n);
 
     ~ChunkWriteOperation() = default;
 
@@ -297,6 +303,7 @@ class ChunkReadOperation : public ChunkOperation<ChunkReadOperation> {
 private:
     struct chunk_read_args {
         const std::string* path;      //!< Path to affected chunk directory
+        const std::string* unique_id; //!< Unique identifier for storage bucket
         char* buf;                    //!< Buffer for chunk
         gkfs::rpc::chnk_id_t chnk_id; //!< chunk id that is affected
         size_t size;                  //!< size to read from chunk
@@ -329,7 +336,8 @@ public:
         std::vector<uint64_t>* chunk_ids;    //!< all chunk ids in this read
     }; //!< Struct to push read data to the client
 
-    ChunkReadOperation(const std::string& path, size_t n);
+    ChunkReadOperation(const std::string& path, const std::string& unique_id,
+                       size_t n);
 
     ~ChunkReadOperation() = default;
 

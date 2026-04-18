@@ -42,6 +42,9 @@ hermes::detail::register_user_request_types(uint32_t provider_id) {
     (void) registered_requests().add<gkfs::rpc::stage_metadata>(provider_id);
     (void) registered_requests().add<gkfs::rpc::registry_request>(provider_id);// --Multiple GekkoFS--
     (void) registered_requests().add<gkfs::rpc::registry_register>(provider_id);// --Multiple GekkoFS--
+    (void) registered_requests().add<gkfs::rpc::registry_register_mallea>(provider_id);
+    (void) registered_requests().add<gkfs::rpc::registry_query_mallea>(provider_id);
+    (void) registered_requests().add<gkfs::rpc::registry_unregister_mallea>(provider_id);
     (void) registered_requests().add<gkfs::rpc::create>(provider_id);
     (void) registered_requests().add<gkfs::rpc::stat>(provider_id);
     (void) registered_requests().add<gkfs::rpc::remove_metadata>(provider_id);

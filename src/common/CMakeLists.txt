@@ -81,6 +81,19 @@ target_link_libraries(log_util
     spdlog::spdlog
     )
 
+add_library(malleability_logger STATIC)
+set_property(TARGET malleability_logger PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_sources(malleability_logger
+    PUBLIC
+    ${INCLUDE_DIR}/common/malleability_logger.hpp
+    PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/malleability_logger.cpp
+    )
+target_link_libraries(malleability_logger
+    PUBLIC
+    Threads::Threads
+    )
+
 add_library(env_util STATIC)
 set_property(TARGET env_util PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_sources(env_util

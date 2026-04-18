@@ -30,6 +30,7 @@
 #include <client/preload_context.hpp>
 #include <client/env.hpp>
 #include <client/logging.hpp>
+#include <client/malleability_logger.hpp>
 #include <client/open_file_map.hpp>
 #include <client/open_dir.hpp>
 #include <client/path.hpp>
@@ -41,6 +42,7 @@
 #include <hermes.hpp>
 
 #include <cassert>
+#include <stdexcept>
 
 #ifndef BYPASS_SYSCALL
 #include <libsyscall_intercept_hook_point.h>
@@ -148,6 +150,7 @@ PreloadContext::hosts() const {
 
 void
 PreloadContext::hosts(const std::vector<hermes::endpoint>& endpoints) {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
     hosts_ = endpoints;
 }
 
@@ -158,7 +161,81 @@ PreloadContext::hosts_name() const {
 
 void
 PreloadContext::hosts_name(const std::vector<std::string>& hosts_name) {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
     hosts_name_ = hosts_name;
+}
+
+hermes::endpoint
+PreloadContext::host_endpoint(uint64_t host_id) const {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    return hosts_.at(host_id);
+}
+
+std::optional<uint64_t>
+PreloadContext::host_index_by_uri(const std::string& uri) const {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    const auto it = host_uri_to_index_.find(uri);
+    if(it == host_uri_to_index_.end()) {
+        return {};
+    }
+    return it->second;
+}
+
+void
+PreloadContext::register_host_uri(const std::string& uri, uint64_t host_id) {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    host_uri_to_index_[uri] = host_id;
+}
+
+uint64_t
+PreloadContext::append_host_if_absent(const std::string& hostname,
+                                      const std::string& uri,
+                                      const hermes::endpoint& endpoint) {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    const auto it = host_uri_to_index_.find(uri);
+    if(it != host_uri_to_index_.end()) {
+        return it->second;
+    }
+
+    const auto host_id = hosts_.size();
+    hosts_.push_back(endpoint);
+    hosts_name_.push_back(hostname);
+    host_uri_to_index_[uri] = host_id;
+    return host_id;
+}
+
+bool
+PreloadContext::epoch_hosts_loaded(gkfs::file_layout::epoch_t epoch) const {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    return epoch_hosts_.find(epoch) != epoch_hosts_.end();
+}
+
+void
+PreloadContext::epoch_hosts(gkfs::file_layout::epoch_t epoch,
+                            const std::vector<uint64_t>& hosts) {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    epoch_hosts_[epoch] = hosts;
+}
+
+uint64_t
+PreloadContext::epoch_host(gkfs::file_layout::epoch_t epoch,
+                           uint64_t target) const {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    const auto it = epoch_hosts_.find(epoch);
+    if(it == epoch_hosts_.end() || target >= it->second.size()) {
+        throw std::out_of_range("epoch target is not mapped to a host");
+    }
+    return it->second.at(target);
+}
+
+std::size_t
+PreloadContext::epoch_hosts_size(gkfs::file_layout::epoch_t epoch) const {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
+    const auto it = epoch_hosts_.find(epoch);
+    if(it == epoch_hosts_.end()) {
+        return 0;
+    }
+    return it->second.size();
 }
 
 /* --Multiple GekkoFS-- */
@@ -202,6 +279,35 @@ PreloadContext::wrapper_pathfs() {
     return wrapper_pathfs_;
 }
 
+gkfs::file_layout::FileLayoutMap&
+PreloadContext::file_layouts() {
+    return file_layouts_;
+}
+
+gkfs::file_layout::epoch_t
+PreloadContext::file_layout_latest_version_epoch(const std::string& path) const {
+    const auto it = file_layouts_.find(path);
+    if(it == file_layouts_.end()) {
+        return 0;
+    }
+    return gkfs::file_layout::file_layout_latest_version_epoch(it->second);
+}
+
+gkfs::file_layout::epoch_t
+PreloadContext::file_layout_global_epoch() const {
+    return file_layout_global_epoch_;
+}
+
+void
+PreloadContext::update_file_layout_global_epoch(
+        gkfs::file_layout::epoch_t epoch) {
+    if(epoch > file_layout_global_epoch_) {
+        const auto previous_epoch = file_layout_global_epoch_;
+        file_layout_global_epoch_ = epoch;
+        gkfs::malleability::log_epoch_change(previous_epoch, epoch);
+    }
+}
+
 uint64_t
 PreloadContext::local_fs_id() const {
     return local_fs_id_;
@@ -238,6 +344,16 @@ PreloadContext::workflow(std::string workflow){
 }
 
 std::string
+PreloadContext::unique_id() const {
+    return unique_id_;
+}
+
+void
+PreloadContext::unique_id(std::string unique_id) {
+    unique_id_ = unique_id;
+}
+
+std::string
 PreloadContext::mergeflows() const {
     return mergeflows_;
 }
@@ -251,7 +367,11 @@ PreloadContext::mergeflows(std::string mergeflows){
 
 void
 PreloadContext::clear_hosts() {
+    std::lock_guard<std::mutex> lock(hosts_mutex_);
     hosts_.clear();
+    hosts_name_.clear();
+    host_uri_to_index_.clear();
+    epoch_hosts_.clear();
 }
 
 uint64_t

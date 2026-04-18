@@ -55,12 +55,14 @@ forward_stage_metadata(const std::string& path,const mode_t mode, const size_t s
 
 pair<int, ssize_t>
 forward_write(const string& path, const void* buf, const off64_t offset,
-              const size_t write_size, const int8_t num_copies);
+              const size_t write_size, const int8_t num_copies,
+              std::uint64_t latest_version_epoch = 0);
 
 pair<int, ssize_t>
 forward_read(const string& path, void* buf, const off64_t offset,
              const size_t read_size, const int8_t num_copies,
-             std::set<int8_t>& failed);
+             std::set<uint64_t>& failed,
+             std::uint64_t latest_version_epoch = 0);
 }// namespace rpc
 
 } // namespace gkfs

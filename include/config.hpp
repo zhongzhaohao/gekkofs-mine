@@ -48,6 +48,8 @@ constexpr auto forwarding_file_path = "./gkfs_forwarding.map";
 constexpr auto registryfile_path = "./gkfs_registry.txt";
 constexpr auto merge_default = "off";
 constexpr auto use_workflow = "off";
+constexpr auto use_malleability = false; // we will make epoch in metadata at future version, do not make this true for now 
+constexpr auto use_bloom = false;
 
 namespace io {
 /*

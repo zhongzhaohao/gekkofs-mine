@@ -116,6 +116,8 @@ rpc_srv_stage_metadata(hg_handle_t handle) {
                 "{}() Failed to retrieve input from handle", __func__);
     assert(ret == HG_SUCCESS);
     GKFS_DATA->spdlogger()->debug("{}() path: '{}'", __func__, in.path);
+    const std::string unique_id =
+            in.unique_id != nullptr ? in.unique_id : "";
     std::string val;
     try {
         out.err = 0;
@@ -126,7 +128,8 @@ rpc_srv_stage_metadata(hg_handle_t handle) {
                 if(S_ISDIR(md.mode())){ //exists and is dir
                     out.err = EISDIR;
                 } else if(S_ISREG(md.mode()) && (md.size() != 0)){
-                    GKFS_DATA->storage()->destroy_chunk_space(in.path);
+                    GKFS_DATA->storage()->destroy_chunk_space(in.path,
+                                                              unique_id);
                 }
             } 
             if(!out.err){ 
@@ -136,6 +139,7 @@ rpc_srv_stage_metadata(hg_handle_t handle) {
                     if(S_ISDIR(dirmd.mode())){
                         gkfs::metadata::Metadata md(in.mode);
                         md.size(in.size);
+                        md.epoch(GKFS_DATA->epoch());
                         gkfs::metadata::update(in.path, md);
                     } else {
                         out.err = ENOTDIR;

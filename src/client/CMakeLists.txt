@@ -40,6 +40,7 @@ target_sources(
           hooks.cpp
           intercept.cpp
           logging.cpp
+          malleability_logger.cpp
           open_file_map.cpp
           open_dir.cpp
           path.cpp
@@ -60,6 +61,7 @@ target_sources(
     intercept.cpp
     hooks.cpp
     logging.cpp
+    malleability_logger.cpp
     open_file_map.cpp
     open_dir.cpp
     path.cpp
@@ -88,6 +90,7 @@ target_link_options(gkfs_user_lib PRIVATE -z noexecstack)
 target_link_libraries(
   gkfs_intercept
   PRIVATE metadata distributor env_util arithmetic path_util rpc_utils
+          malleability_logger
   PUBLIC Syscall_intercept::Syscall_intercept
          dl
          Mercury::Mercury
@@ -106,6 +109,7 @@ install(
 target_link_libraries(
     gkfs_user_lib
     PRIVATE metadata distributor env_util arithmetic path_util rpc_utils
+            malleability_logger
     PUBLIC dl
     Mercury::Mercury
     hermes
@@ -141,6 +145,7 @@ if(GKFS_ENABLE_FORWARDING)
             hooks.cpp
             intercept.cpp
             logging.cpp
+            malleability_logger.cpp
             open_file_map.cpp
             open_dir.cpp
             path.cpp
@@ -162,6 +167,7 @@ if(GKFS_ENABLE_FORWARDING)
   target_link_libraries(
     gkfwd_intercept
     PRIVATE metadata distributor env_util arithmetic path_util rpc_utils
+            malleability_logger
     PUBLIC Syscall_intercept::Syscall_intercept
            dl
            Mercury::Mercury

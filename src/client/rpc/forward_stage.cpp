@@ -46,7 +46,8 @@ forward_stage_metadata(const std::string& path,const mode_t mode, const size_t s
     auto endp = CTX->hosts().at(
                 CTX->distributor()->locate_file_metadata(path, 0));
     gkfs::rpc::stage_metadata::output out;
-    gkfs::rpc::stage_metadata::input in(path, mode, size, flag);
+    gkfs::rpc::stage_metadata::input in(path, mode, size, flag,
+                                        CTX->unique_id());
 
     try {
         LOG(DEBUG, "Staging is processing file metadata.");

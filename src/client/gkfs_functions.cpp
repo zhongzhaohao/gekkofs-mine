@@ -32,15 +32,21 @@
 #include <client/preload_util.hpp>
 #include <client/logging.hpp>
 #include <client/gkfs_functions.hpp>
+#include <client/malleability_logger.hpp>
 #include <client/rpc/forward_metadata.hpp>
 #include <client/rpc/forward_data.hpp>
 #include <client/open_dir.hpp>
 #include <common/rpc/distributor.hpp>
 #include <common/path_util.hpp>
 
+#include <algorithm>
+#include <cerrno>
+#include <utility>
+
 extern "C" {
 #include <dirent.h> // used for file types in the getdents{,64}() functions
 #include <linux/kernel.h> // used for definition of alignment macros
+#include <sys/stat.h>
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
 }
@@ -191,11 +197,18 @@ namespace gkfs::syscall {
  */
 int
 gkfs_open(const std::string& path, mode_t mode, int flags) {
+    auto malleability_log =
+            gkfs::malleability::start_io("open", path, 0, 0);
+    auto finish_open = [&](int ret) {
+        const auto err = ret < 0 ? errno : 0;
+        gkfs::malleability::finish_io(std::move(malleability_log), 0, 0, err);
+        return ret;
+    };
 
     if(flags & O_PATH) {
         LOG(ERROR, "`O_PATH` flag is not supported");
         errno = ENOTSUP;
-        return -1;
+        return finish_open(-1);
     }
 
     // metadata object filled during create or stat
@@ -204,7 +217,7 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
         if(flags & O_DIRECTORY) {
             LOG(ERROR, "O_DIRECTORY use with O_CREAT. NOT SUPPORTED");
             errno = ENOTSUP;
-            return -1;
+            return finish_open(-1);
         }
         // no access check required here. If one is using our FS they have the
         // permissions.
@@ -214,16 +227,16 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
                 // file exists, O_CREAT was set
                 if(flags & O_EXCL) {
                     // File exists and O_EXCL & O_CREAT was set
-                    return -1;
+                    return finish_open(-1);
                 }
                 // file exists, O_CREAT was set O_EXCL wasnt, so function does
                 // not fail this case is actually undefined as per `man 2 open`
-                auto md_ = gkfs::utils::get_metadata(path);
+                auto md_ = gkfs::utils::get_metadata(path, false, true);
                 if(!md_) {
                     LOG(ERROR,
                         "Could not get metadata after creating file '{}': '{}'",
                         path, strerror(errno));
-                    return -1;
+                    return finish_open(-1);
                 }
                 md = *md_;
 #ifdef HAS_RENAME
@@ -232,27 +245,28 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
                     LOG(DEBUG,
                         "This file was renamed and we do not open. path '{}'",
                         path);
-                    return -1;
+                    return finish_open(-1);
                 }
 #endif // HAS_RENAME
             } else {
                 LOG(ERROR, "Error creating file: '{}'", strerror(errno));
-                return -1;
+                return finish_open(-1);
             }
         } else {
             clear_all_pathfs();
             // file was successfully created. Add to filemap
-            return CTX->file_map()->add(
+            auto fd = CTX->file_map()->add(
                     std::make_shared<gkfs::filemap::OpenFile>(path, flags));
+            return finish_open(fd);
         }
     } else {
-        auto md_ = gkfs::utils::get_metadata(path);
+        auto md_ = gkfs::utils::get_metadata(path, false, true);
         if(!md_) {
             if(errno != ENOENT) {
                 LOG(ERROR, "Error stating existing file '{}'", path);
             }
             // file doesn't exist and O_CREAT was not set
-            return -1;
+            return finish_open(-1);
         }
         md = *md_;
     }
@@ -263,16 +277,16 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
         if(flags & O_NOFOLLOW) {
             LOG(WARNING, "Symlink found and O_NOFOLLOW flag was specified");
             errno = ELOOP;
-            return -1;
+            return finish_open(-1);
         }
-        return gkfs_open(md.target_path(), mode, flags);
+        return finish_open(gkfs_open(md.target_path(), mode, flags));
     }
 #ifdef HAS_RENAME
     auto new_path = path;
     if(md.blocks() == -1) {
         // This is an old file that was renamed and essentially no longer exists
         errno = ENOENT;
-        return -1;
+        return finish_open(-1);
     } else {
         if(!md.target_path().empty()) {
             // get renamed path from target and retrieve metadata from it
@@ -283,12 +297,12 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
                 md_ = gkfs::utils::get_metadata(md_.value().target_path(),
                                                 false);
                 if(!md_) {
-                    return -1;
+                    return finish_open(-1);
                 }
             }
             md = *md_;
             if(S_ISDIR(md.mode())) {
-                return gkfs_opendir(new_path);
+                return finish_open(gkfs_opendir(new_path));
             }
 
             /*** Regular file exists ***/
@@ -297,18 +311,21 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
             if((flags & O_TRUNC) && ((flags & O_RDWR) || (flags & O_WRONLY))) {
                 if(gkfs_truncate(new_path, md.size(), 0)) {
                     LOG(ERROR, "Error truncating file");
-                    return -1;
+                    return finish_open(-1);
                 }
             }
             clear_all_pathfs();
-            return CTX->file_map()->add(
+            auto fd = CTX->file_map()->add(
                     std::make_shared<gkfs::filemap::OpenFile>(new_path, flags));
+            // CTX->file_layouts().emplace(
+            //         new_path, gkfs::file_layout::make_file_layout_record(0));
+            return finish_open(fd);
         }
     }
 #endif // HAS_RENAME
 #endif // HAS_SYMLINKS
     if(S_ISDIR(md.mode())) {
-        return gkfs_opendir(path);
+        return finish_open(gkfs_opendir(path));
     }
 
     /*** Regular file exists ***/
@@ -317,12 +334,13 @@ gkfs_open(const std::string& path, mode_t mode, int flags) {
     if((flags & O_TRUNC) && ((flags & O_RDWR) || (flags & O_WRONLY))) {
         if(gkfs_truncate(path, md.size(), 0)) {
             LOG(ERROR, "Error truncating file");
-            return -1;
+            return finish_open(-1);
         }
     }
     clear_all_pathfs();
-    return CTX->file_map()->add(
+    auto fd = CTX->file_map()->add(
             std::make_shared<gkfs::filemap::OpenFile>(path, flags));
+    return finish_open(fd);
 }
 
 /**
@@ -375,6 +393,7 @@ gkfs_create(const std::string& path, mode_t mode) {
     if(!success) {
         return -1;
     }
+
     clear_all_pathfs();
     return 0;
 }
@@ -947,10 +966,14 @@ gkfs_dup2(const int oldfd, const int newfd) {
 ssize_t
 gkfs_pwrite(std::shared_ptr<gkfs::filemap::OpenFile> file, const char* buf,
             size_t count, off64_t offset, bool update_pos) {
+    auto malleability_log =
+            gkfs::malleability::start_io("write", file->path(), offset, count);
     if(file->type() != gkfs::filemap::FileType::regular) {
         assert(file->type() == gkfs::filemap::FileType::directory);
         LOG(WARNING, "Cannot write to directory");
         errno = EISDIR;
+        gkfs::malleability::finish_io(std::move(malleability_log), offset, -1,
+                                      EISDIR);
         return -1;
     }
     auto path = make_unique<string>(file->path());
@@ -965,6 +988,8 @@ gkfs_pwrite(std::shared_ptr<gkfs::filemap::OpenFile> file, const char* buf,
     if(err) {
         LOG(ERROR, "update_metadentry_size() failed with err '{}'", err);
         errno = err;
+        gkfs::malleability::finish_io(std::move(malleability_log), offset, -1,
+                                      err);
         return -1;
     }
     if(is_append) {
@@ -977,18 +1002,24 @@ gkfs_pwrite(std::shared_ptr<gkfs::filemap::OpenFile> file, const char* buf,
                 "This occurs when the staring offset could not be extracted "
                 "from RocksDB's merge operations. Inform GekkoFS devs.");
             errno = EIO;
+            gkfs::malleability::finish_io(std::move(malleability_log), offset,
+                                          -1, EIO);
             return -1;
         }
         offset = ret_offset.second;
     }
 
-    auto ret_write = gkfs::rpc::forward_write(wrapper_path, buf, offset, count, 0);
+    const auto latest_version_epoch =
+            CTX->file_layout_latest_version_epoch(*path);
+    auto ret_write = gkfs::rpc::forward_write(wrapper_path, buf, offset, count,
+                                              0, latest_version_epoch);
     err = ret_write.first;
     write_size = ret_write.second;
 
     if(num_replicas > 0) {
         auto ret_write_repl = gkfs::rpc::forward_write(wrapper_path, buf, offset,
-                                                       count, num_replicas);
+                                                       count, num_replicas,
+                                                       latest_version_epoch);
 
         if(err and ret_write_repl.first == 0) {
             // We succesfully write the data to some replica
@@ -1001,6 +1032,8 @@ gkfs_pwrite(std::shared_ptr<gkfs::filemap::OpenFile> file, const char* buf,
     if(err) {
         LOG(WARNING, "gkfs::rpc::forward_write() failed with err '{}'", err);
         errno = err;
+        gkfs::malleability::finish_io(std::move(malleability_log), offset, -1,
+                                      err);
         return -1;
     }
     if(update_pos) {
@@ -1012,6 +1045,8 @@ gkfs_pwrite(std::shared_ptr<gkfs::filemap::OpenFile> file, const char* buf,
             "gkfs::rpc::forward_write() wrote '{}' bytes instead of '{}'",
             write_size, count);
     }
+    gkfs::malleability::finish_io(std::move(malleability_log), offset,
+                                  write_size, 0);
     clear_all_pathfs();
     return write_size; // return written size
 }
@@ -1121,10 +1156,14 @@ gkfs_writev(int fd, const struct iovec* iov, int iovcnt) {
 ssize_t
 gkfs_pread(std::shared_ptr<gkfs::filemap::OpenFile> file, char* buf,
            size_t count, off64_t offset) {
+    auto malleability_log =
+            gkfs::malleability::start_io("read", file->path(), offset, count);
     if(file->type() != gkfs::filemap::FileType::regular) {
         assert(file->type() == gkfs::filemap::FileType::directory);
         LOG(WARNING, "Cannot read from directory");
         errno = EISDIR;
+        gkfs::malleability::finish_io(std::move(malleability_log), offset, -1,
+                                      EISDIR);
         return -1;
     }
 
@@ -1134,32 +1173,44 @@ gkfs_pread(std::shared_ptr<gkfs::filemap::OpenFile> file, char* buf,
         memset(buf, 0, sizeof(char) * count);
     }
     std::pair<int, off_t> ret;
-    std::set<int8_t> failed; // set with failed targets.
+    std::set<uint64_t> failed; // set with failed hosts.
+    const auto latest_version_epoch = CTX->file_layout_latest_version_epoch(file->path());
     std::string wrapper_path;
     add_one_pathfs(file->path(), wrapper_path);
     if(CTX->get_replicas() != 0) {
 
         ret = gkfs::rpc::forward_read(wrapper_path, buf, offset, count,
-                                      CTX->get_replicas(), failed);
+                                      CTX->get_replicas(), failed,
+                                      latest_version_epoch);
         while(ret.first == EIO) {
             ret = gkfs::rpc::forward_read(wrapper_path, buf, offset, count,
-                                          CTX->get_replicas(), failed);
+                                          CTX->get_replicas(), failed,
+                                          latest_version_epoch);
             LOG(WARNING, "gkfs::rpc::forward_read() failed with ret '{}'",
                 ret.first);
         }
 
     } else {
         ret = gkfs::rpc::forward_read(wrapper_path, buf, offset, count, 0,
-                                      failed);
+                                      failed, latest_version_epoch);
     }
-
+    if(ret.first == ENOENT){
+        gkfs::utils::get_metadata(wrapper_path, false, true);
+        ret = gkfs::rpc::forward_read(wrapper_path, buf, offset, count, 0,
+                                      failed, latest_version_epoch);
+    }
+    
     auto err = ret.first;
     if(err) {
         LOG(WARNING, "gkfs::rpc::forward_read() failed with ret '{}'", err);
         errno = err;
+        gkfs::malleability::finish_io(std::move(malleability_log), offset, -1,
+                                      err);
         return -1;
     }
     clear_all_pathfs();
+    gkfs::malleability::finish_io(std::move(malleability_log), offset,
+                                  static_cast<ssize_t>(ret.second), 0);
     // XXX check that we don't try to read past end of the file
     return ret.second; // return read size
 }

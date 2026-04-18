@@ -73,14 +73,20 @@ private:
     std::string root_path_; //!< Path to GekkoFS root directory
     size_t chunksize_; //!< File system chunksize. TODO Why does that exist?
 
+    [[nodiscard]] inline std::string
+    bucket_path(const std::string& unique_id) const;
+
     /**
      * @brief Converts an internal gkfs path under the root dir to the absolute
      * path of the system.
      * @param internal_path E.g., /foo/bar
+     * @param unique_id Identifier used to isolate data into a dedicated
+     * directory below the chunk root.
      * @return Absolute path, e.g., /tmp/rootdir/<pid>/data/chunks/foo:bar
      */
     [[nodiscard]] inline std::string
-    absolute(const std::string& internal_path) const;
+    absolute(const std::string& internal_path,
+             const std::string& unique_id) const;
 
     /**
      * @brief Returns the chunk dir directory for a given path which is expected
@@ -107,7 +113,8 @@ private:
      * @param file_path Chunk file path, e.g., /foo/bar
      */
     void
-    init_chunk_space(const std::string& file_path) const;
+    init_chunk_space(const std::string& file_path,
+                     const std::string& unique_id) const;
 
 public:
     /**
@@ -125,7 +132,8 @@ public:
      * @throws ChunkStorageException
      */
     void
-    destroy_chunk_space(const std::string& file_path) const;
+    destroy_chunk_space(const std::string& file_path,
+                        const std::string& unique_id) const;
 
     /**
      * @brief Writes a single chunk file and is usually called by an Argobots
@@ -140,7 +148,8 @@ public:
      */
     ssize_t
     write_chunk(const std::string& file_path, gkfs::rpc::chnk_id_t chunk_id,
-                const char* buf, size_t size, off64_t offset) const;
+                const std::string& unique_id, const char* buf, size_t size,
+                off64_t offset) const;
 
     /**
      * @brief Reads a single chunk file and is usually called by an Argobots
@@ -155,7 +164,8 @@ public:
      */
     ssize_t
     read_chunk(const std::string& file_path, gkfs::rpc::chnk_id_t chunk_id,
-               char* buf, size_t size, off64_t offset) const;
+               const std::string& unique_id, char* buf, size_t size,
+               off64_t offset) const;
 
     /**
      * @brief Delete all chunks starting with chunk a chunk id.
@@ -165,7 +175,8 @@ public:
      */
     void
     trim_chunk_space(const std::string& file_path,
-                     gkfs::rpc::chnk_id_t chunk_start);
+                     gkfs::rpc::chnk_id_t chunk_start,
+                     const std::string& unique_id);
 
     /**
      * @brief Truncates a single chunk file to a given byte length.
@@ -176,7 +187,8 @@ public:
      */
     void
     truncate_chunk_file(const std::string& file_path,
-                        gkfs::rpc::chnk_id_t chunk_id, off_t length);
+                        gkfs::rpc::chnk_id_t chunk_id,
+                        const std::string& unique_id, off_t length);
 
     /**
      * @brief Calls statfs on the chunk directory to get statistic on its used

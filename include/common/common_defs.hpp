@@ -29,11 +29,41 @@
 #ifndef GEKKOFS_COMMON_DEFS_HPP
 #define GEKKOFS_COMMON_DEFS_HPP
 
+#include <cstdint>
+
 // These constexpr set the RPC's identity and which handler the receiver end
 // should use
 namespace gkfs::rpc {
 
 using chnk_id_t = unsigned long;
+
+enum class daemon_resize_action : std::int32_t {
+    unknown = -1,
+    expand = 0,
+    borrowed = 1,
+    shrink = 2,
+};
+
+constexpr bool
+is_valid_daemon_resize_action(std::int32_t action) {
+    return action == static_cast<std::int32_t>(daemon_resize_action::expand) ||
+           action == static_cast<std::int32_t>(daemon_resize_action::borrowed) ||
+           action == static_cast<std::int32_t>(daemon_resize_action::shrink);
+}
+
+constexpr const char*
+to_string(daemon_resize_action action) {
+    switch(action) {
+        case daemon_resize_action::expand:
+            return "expand";
+        case daemon_resize_action::borrowed:
+            return "borrowed";
+        case daemon_resize_action::shrink:
+            return "shrink";
+        default:
+            return "unknown";
+    }
+}
 
 namespace tag {
 
@@ -41,9 +71,12 @@ constexpr auto fs_config = "rpc_srv_fs_config";
 constexpr auto bloom_filter = "rpc_srv_bloom_filter";
 constexpr auto registry_request = "rpc_srv_registry_request";
 constexpr auto registry_register = "rpc_srv_registry_register";
+constexpr auto registry_register_mallea = "rpc_srv_registry_register_mallea";
+constexpr auto registry_query_mallea = "rpc_srv_registry_query_mallea";
+constexpr auto registry_unregister_mallea = "rpc_srv_registry_unregister_mallea";
 constexpr auto stage = "rpc_srv_stage";
 constexpr auto stage_metadata = "rpc_srv_stage_metadata";
-//constexpr auto daemon_update_epoch = "rpc_srv_daemon_update_epoch"; /* mallleability */
+constexpr auto daemon_update_epoch = "rpc_srv_daemon_update_epoch"; /* mallleability */
 constexpr auto create = "rpc_srv_mk_node";
 constexpr auto stat = "rpc_srv_stat";
 constexpr auto remove_metadata = "rpc_srv_rm_metadata";

@@ -51,12 +51,44 @@ using namespace std;
 
 namespace gkfs::data {
 
+namespace {
+
+string
+encode_unique_id(const string& unique_id) {
+    string encoded;
+    encoded.reserve(unique_id.size());
+
+    for(const unsigned char c : unique_id) {
+        if((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+           (c >= 'a' && c <= 'z') || c == '.' || c == '_' || c == '-') {
+            encoded.push_back(static_cast<char>(c));
+            continue;
+        }
+        encoded += fmt::format("%{:02X}", static_cast<unsigned int>(c));
+    }
+
+    return encoded;
+}
+
+} // namespace
+
 // private functions
 
 string
-ChunkStorage::absolute(const string& internal_path) const {
+ChunkStorage::bucket_path(const string& unique_id) const {
+    fs::path path(root_path_);
+    if(!unique_id.empty()) {
+        path /= encode_unique_id(unique_id);
+    }
+    return path.string();
+}
+
+string
+ChunkStorage::absolute(const string& internal_path,
+                       const string& unique_id) const {
     assert(gkfs::path::is_relative(internal_path));
-    return fmt::format("{}/{}", root_path_, internal_path);
+    auto path = fs::path(bucket_path(unique_id)) / internal_path;
+    return path.string();
 }
 
 /**
@@ -85,14 +117,16 @@ ChunkStorage::get_chunk_path(const string& file_path,
 }
 
 void
-ChunkStorage::init_chunk_space(const string& file_path) const {
-    auto chunk_dir = absolute(get_chunks_dir(file_path));
-    auto err = mkdir(chunk_dir.c_str(), 0750);
-    if(err == -1 && errno != EEXIST) {
+ChunkStorage::init_chunk_space(const string& file_path,
+                               const string& unique_id) const {
+    auto chunk_dir = absolute(get_chunks_dir(file_path), unique_id);
+    std::error_code ec;
+    fs::create_directories(chunk_dir, ec);
+    if(ec) {
         auto err_str = fmt::format(
                 "{}() Failed to create chunk directory. File: '{}', Error: '{}'",
-                __func__, file_path, errno);
-        throw ChunkStorageException(errno, err_str);
+                __func__, file_path, ec.message());
+        throw ChunkStorageException(ec.value(), err_str);
     }
 }
 
@@ -118,8 +152,9 @@ ChunkStorage::ChunkStorage(string& path, const size_t chunksize)
 }
 
 void
-ChunkStorage::destroy_chunk_space(const string& file_path) const {
-    auto chunk_dir = absolute(get_chunks_dir(file_path));
+ChunkStorage::destroy_chunk_space(const string& file_path,
+                                  const string& unique_id) const {
+    auto chunk_dir = absolute(get_chunks_dir(file_path), unique_id);
     try {
         // Note: remove_all does not throw an error when path doesn't exist.
         auto n = fs::remove_all(chunk_dir);
@@ -142,14 +177,15 @@ ChunkStorage::destroy_chunk_space(const string& file_path) const {
  */
 ssize_t
 ChunkStorage::write_chunk(const string& file_path,
-                          gkfs::rpc::chnk_id_t chunk_id, const char* buf,
-                          size_t size, off64_t offset) const {
+                          gkfs::rpc::chnk_id_t chunk_id,
+                          const string& unique_id, const char* buf, size_t size,
+                          off64_t offset) const {
     // /* --PFL implementation-- */ remove this assert
     //assert((offset + size) <= chunksize_);
     // may throw ChunkStorageException on failure
-    init_chunk_space(file_path);
+    init_chunk_space(file_path, unique_id);
 
-    auto chunk_path = absolute(get_chunk_path(file_path, chunk_id));
+    auto chunk_path = absolute(get_chunk_path(file_path, chunk_id), unique_id);
 
     FileHandle fh(open(chunk_path.c_str(), O_WRONLY | O_CREAT, 0640),
                   chunk_path);
@@ -193,10 +229,11 @@ ChunkStorage::write_chunk(const string& file_path,
  */
 ssize_t
 ChunkStorage::read_chunk(const string& file_path, gkfs::rpc::chnk_id_t chunk_id,
-                         char* buf, size_t size, off64_t offset) const {
+                         const string& unique_id, char* buf, size_t size,
+                         off64_t offset) const {
     // /* --PFL implementation-- */ remove this assert
     //assert((offset + size) <= chunksize_);
-    auto chunk_path = absolute(get_chunk_path(file_path, chunk_id));
+    auto chunk_path = absolute(get_chunk_path(file_path, chunk_id), unique_id);
 
     FileHandle fh(open(chunk_path.c_str(), O_RDONLY), chunk_path);
     if(!fh.valid()) {
@@ -261,9 +298,10 @@ ChunkStorage::read_chunk(const string& file_path, gkfs::rpc::chnk_id_t chunk_id,
  */
 void
 ChunkStorage::trim_chunk_space(const string& file_path,
-                               gkfs::rpc::chnk_id_t chunk_start) {
+                               gkfs::rpc::chnk_id_t chunk_start,
+                               const string& unique_id) {
 
-    auto chunk_dir = absolute(get_chunks_dir(file_path));
+    auto chunk_dir = absolute(get_chunks_dir(file_path), unique_id);
     const fs::directory_iterator end;
     auto err_flag = false;
     for(fs::directory_iterator chunk_file(chunk_dir); chunk_file != end;
@@ -290,8 +328,9 @@ ChunkStorage::trim_chunk_space(const string& file_path,
 
 void
 ChunkStorage::truncate_chunk_file(const string& file_path,
-                                  gkfs::rpc::chnk_id_t chunk_id, off_t length) {
-    auto chunk_path = absolute(get_chunk_path(file_path, chunk_id));
+                                  gkfs::rpc::chnk_id_t chunk_id,
+                                  const string& unique_id, off_t length) {
+    auto chunk_path = absolute(get_chunk_path(file_path, chunk_id), unique_id);
     // /* --PFL implementation-- */ change this assert
     assert(length > 0); //&&
     //       static_cast<gkfs::rpc::chnk_id_t>(length) <= chunksize_);
