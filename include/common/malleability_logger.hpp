@@ -75,6 +75,15 @@ public:
     flush() noexcept;
 
     void
+    enable() noexcept;
+
+    void
+    disable() noexcept;
+
+    bool
+    enabled() const noexcept;
+
+    void
     shutdown() noexcept;
 
     static std::int64_t

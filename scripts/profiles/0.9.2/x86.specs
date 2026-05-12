@@ -25,60 +25,58 @@
 #                                                                              #
 # SPDX-License-Identifier: GPL-3.0-or-later                                    #
 ################################################################################
+
 # vi: ft=bash
 
-################################################################################
-## The installation script must define both a pkg_install function and
-## pkg_check function that, as their name implies, must specify how
-## a dependency package should be installed and tested.  ## ## The following
-## variables can be used in the installation script:
-## - CMAKE: a variable that expands to the cmake binary
-## - SOURCE_DIR: the directory where the sources for the package were
-##               downloaded
-## - INSTALL_DIR: the directory where the package should be installed
-## - CORES: the number of cores to use when building
-## - COMPILER_NAME: the name of the compiler being used (e.g. g++, clang, etc.)
-## - COMPILER_FULL_VERSION: the compiler's full version (e.g. 9.3.0)
-## - COMPILER_MAJOR_VERSION: the compiler's major version (e.g. 9)
-## - PERFORM_TEST: whether tests for the package should be executed
-################################################################################
+# Variables to be imported into the scripts
+declare -A wgetdeps clonedeps clonedeps_args clonedeps_patches extra_install_args
+declare -a order
 
-pkg_install() {
+# Comment that should be displayed when printing the profile
+comment="Dependencies for PowerPC supercomputer"
 
-    # if the profile compiles bmi, enable it
-    if [[ -n "${PROFILE_DEP_NAMES['bmi']}" ]]; then
-        USE_BMI="-DNA_USE_BMI:BOOL=ON"
-    else
-        USE_BMI="-DNA_USE_BMI:BOOL=OFF"
-    fi
+# Dependencies that must be downloaded directly
+wgetdeps=(
+    ["lz4"]="1.9.3"
+    ["capstone"]="4.0.2"
+    ["argobots"]="1.1"
+    ["rocksdb"]="6.26.1"
+    ["psm2"]="11.2.185"
+    ["json-c"]="0.15-20200726"
+)
 
-    # if the profile provides any flavour of libfabric, enable it
-    if profile_has_dependency "^libfabric.*$"; then
-        USE_OFI="-DNA_USE_OFI:BOOL=ON"
-    else
-        USE_OFI="-DNA_USE_OFI:BOOL=OFF"
-    fi
-    # added to enable ucx support in mercury
-    USE_UCX="-DNA_USE_UCX:BOOL=ON"
+# Dependencies that must be cloned
+clonedeps=(
+    ["libfabric"]="HEAD@v1.13.2"
+    ["mercury"]="v2.4.0"
+    ["margo"]="v0.18.3"
+    ["syscall_intercept"]="68e6f804a21788738202faab693701720fecdd0b@arm"
+)
 
-    ID="mercury"
-    CURR="${SOURCE_DIR}/${ID}"
-    prepare_build_dir "${CURR}"
-    cd "${CURR}/build"
-    PKG_CONFIG_PATH="${INSTALL_DIR}/lib/pkgconfig" $CMAKE \
-        -DCMAKE_PREFIX_PATH=${INSTALL_DIR} \
-        -DCMAKE_BUILD_TYPE:STRING=Release \
-        -DBUILD_TESTING:BOOL=ON \
-        -DMERCURY_USE_CHECKSUMS:BOOL=OFF \
-        -DMERCURY_USE_BOOST_PP:BOOL=ON \
-        -DBUILD_SHARED_LIBS:BOOL=ON \
-        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
-        ${USE_BMI} ${USE_OFI} ${USE_UCX}\
-        ..
-    make -j"${CORES}"
-    make install
-}
+# Extra arguments for git clone
+clonedeps_args=(
+    ["mercury"]="--recurse-submodules"
+)
 
-pkg_check() {
-    :
-}
+# Patches that should be applied post-clone
+clonedeps_patches=(
+    ["syscall_intercept"]="syscall_intercept.patch syscall_intercept_clone3.patch"
+)
+
+
+# Ordering that MUST be followed when downloading
+order=(
+   "lz4" "capstone" "json-c" "psm2" "libfabric" "mercury" "argobots" "margo" "rocksdb" "syscall_intercept"
+)
+
+# Extra arguments passed to the installation script. As such, they can
+# reference the following variables:
+#  - CMAKE: a variable that expands to the cmake binary
+#  - SOURCE_DIR: the directory where the sources for the package were
+#               downloaded
+#  - INSTALL_DIR: the directory where the package should be installed
+#  - CORES: the number of cores to use when building
+#  - PERFORM_TEST: whether tests for the package should be executed
+extra_install_args=(
+    ["libfabric"]="--enable-psm2=no --enable-sockets=yes"
+)

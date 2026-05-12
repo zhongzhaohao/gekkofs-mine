@@ -87,9 +87,10 @@ forward_create(const std::string& path, const mode_t mode, const int copy) {
         if(CTX->use_workflow())
            CTX->bloom_filter_vec().at(id).insert(path);
         if(S_ISREG(mode)) {
-            CTX->file_layouts()[path] =
-                    gkfs::file_layout::make_file_layout_record(
-                            out.latest_version_epoch(), out.latest_version_epoch());
+            CTX->file_layouts().set(
+                    path, gkfs::file_layout::make_file_layout_record(
+                                  out.latest_version_epoch(),
+                                  out.latest_version_epoch()));
             CTX->update_file_layout_global_epoch(out.latest_version_epoch());
         }
         return 0;
@@ -246,9 +247,8 @@ forward_stat(const std::string& path, string& attr, const int copy, bool update_
 
             attr = out.db_val();
             if(update_layout && !out.file_layout().empty()) {
-                auto& layouts = CTX->file_layouts();
-                gkfs::file_layout::publish_file_layout_snapshot_if_newer(
-                        layouts[wrapper_path], out.latest_version_epoch(),
+                CTX->file_layouts().publish_if_newer(
+                        wrapper_path, out.latest_version_epoch(),
                         out.file_layout());
                 CTX->update_file_layout_global_epoch(
                         out.latest_version_epoch());
@@ -726,9 +726,8 @@ forward_update_metadentry_size(const string& path, const size_t size,
                 valid = true;
                 out_size = out.ret_size();
                 if(!out.file_layout().empty()) {
-                    auto& layouts = CTX->file_layouts();
-                    gkfs::file_layout::publish_file_layout_snapshot_if_newer(
-                            layouts[path], out.latest_version_epoch(),
+                    CTX->file_layouts().publish_if_newer(
+                            path, out.latest_version_epoch(),
                             out.file_layout());
                     CTX->update_file_layout_global_epoch(
                             out.latest_version_epoch());

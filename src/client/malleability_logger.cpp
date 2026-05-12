@@ -17,6 +17,7 @@
 
 #include <config.hpp>
 
+#include <atomic>
 #include <cerrno>
 #include <fstream>
 #include <sstream>
@@ -39,6 +40,10 @@ extern "C" {
 namespace {
 
 constexpr auto log_root_dir = "/tmp/malleability_log";
+
+std::atomic<bool> logging_enabled_flag{
+        gkfs::config::malleability::client_logging};
+std::atomic<bool> logger_created{false};
 
 class ClientMalleabilityLogger final
     : public gkfs::malleability::common::MalleabilityLoggerBase {
@@ -104,7 +109,11 @@ private:
 
 ClientMalleabilityLogger*
 logger() noexcept {
-    static auto* instance = new ClientMalleabilityLogger();
+    static auto* instance = [] {
+        auto* created = new ClientMalleabilityLogger();
+        logger_created.store(true, std::memory_order_release);
+        return created;
+    }();
     return instance;
 }
 
@@ -146,6 +155,9 @@ namespace gkfs::malleability {
 PendingIoLog
 start_io(const char* operation, const std::string& file, off64_t offset,
          std::size_t requested_size) {
+    if(!logging_enabled()) {
+        return {operation, file, offset, requested_size, 0};
+    }
     return {operation, file, offset, requested_size,
             gkfs::malleability::common::MalleabilityLoggerBase::now_epoch_ns()};
 }
@@ -154,6 +166,14 @@ void
 finish_io(PendingIoLog entry, off64_t final_offset, ssize_t actual_size,
           int err) {
     const auto saved_errno = errno;
+    if(entry.start_time_ns == 0) {
+        errno = saved_errno;
+        return;
+    }
+    if(!logging_enabled()) {
+        errno = saved_errno;
+        return;
+    }
     try {
         const auto process_id = logger()->log_process_id();
         logger()->enqueue(
@@ -180,19 +200,54 @@ finish_io(PendingIoLog entry, off64_t final_offset, ssize_t actual_size,
 void
 flush() {
     const auto saved_errno = errno;
-    logger()->flush();
+    if(logger_created.load(std::memory_order_acquire)) {
+        logger()->flush();
+    }
     errno = saved_errno;
+}
+
+void
+enable_logging() {
+    logging_enabled_flag.store(true, std::memory_order_release);
+    if(logger_created.load(std::memory_order_acquire)) {
+        logger()->enable();
+    }
+}
+
+void
+disable_logging() {
+    logging_enabled_flag.store(false, std::memory_order_release);
+    if(logger_created.load(std::memory_order_acquire)) {
+        logger()->disable();
+    }
+}
+
+bool
+logging_enabled() {
+    if(!logging_enabled_flag.load(std::memory_order_acquire)) {
+        return false;
+    }
+    if(logger_created.load(std::memory_order_acquire)) {
+        return logger()->enabled();
+    }
+    return true;
 }
 
 void
 shutdown() {
     const auto saved_errno = errno;
-    logger()->shutdown();
+    logging_enabled_flag.store(false, std::memory_order_release);
+    if(logger_created.load(std::memory_order_acquire)) {
+        logger()->shutdown();
+    }
     errno = saved_errno;
 }
 
 void
 log_epoch_change(std::uint64_t previous_epoch, std::uint64_t current_epoch) {
+    if(!logging_enabled()) {
+        return;
+    }
     if(current_epoch <= previous_epoch) {
         return;
     }

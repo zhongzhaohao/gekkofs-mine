@@ -40,6 +40,15 @@ void
 flush();
 
 void
+enable_logging();
+
+void
+disable_logging();
+
+bool
+logging_enabled();
+
+void
 shutdown();
 
 void

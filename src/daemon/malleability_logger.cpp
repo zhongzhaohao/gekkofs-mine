@@ -13,7 +13,11 @@
 #include <common/malleability_logger.hpp>
 #include <common/rpc/rpc_util.hpp>
 
+#include <config.hpp>
+
+#include <atomic>
 #include <cerrno>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -27,7 +31,14 @@ extern "C" {
 
 namespace {
 
-constexpr auto log_root_dir = "/tmp/mallea_logs/daemon_log/";
+namespace fs = std::filesystem;
+
+constexpr auto log_root_dir = "/tmp/mallea_logs/daemon_log";
+constexpr std::size_t daemon_flush_threshold = 40000;
+
+std::atomic<bool> logging_enabled_flag{
+        gkfs::config::malleability::daemon_logging};
+std::atomic<bool> logger_created{false};
 
 class DaemonMalleabilityLogger final
     : public gkfs::malleability::common::MalleabilityLoggerBase {
@@ -35,7 +46,8 @@ public:
     DaemonMalleabilityLogger()
         : MalleabilityLoggerBase(log_root_dir,
                                  gkfs::rpc::get_my_hostname(true), ::getpid(),
-                                 "daemon_", ".log", 40000, false) {
+                                 "daemon_", ".log", daemon_flush_threshold,
+                                 false) {
         start_worker();
     }
 
@@ -56,10 +68,11 @@ public:
 private:
     bool
     ensure_dir(const std::string& path) noexcept override {
-        if(::mkdir(path.c_str(), 0755) == 0) {
+        std::error_code ec;
+        if(fs::create_directories(path, ec)) {
             return true;
         }
-        return errno == EEXIST;
+        return !ec && fs::is_directory(path, ec);
     }
 
     int
@@ -92,8 +105,12 @@ private:
 
 DaemonMalleabilityLogger&
 logger() {
-    static DaemonMalleabilityLogger instance;
-    return instance;
+    static auto* instance = [] {
+        auto* created = new DaemonMalleabilityLogger();
+        logger_created.store(true, std::memory_order_release);
+        return created;
+    }();
+    return *instance;
 }
 
 std::size_t
@@ -123,6 +140,9 @@ namespace gkfs::daemon::malleability {
 PendingIoLog
 start_io(const char* operation, const std::string& file, off64_t offset,
          std::size_t requested_size, const std::string& unique_id) {
+    if(!logging_enabled()) {
+        return {operation, file, "", offset, requested_size, 0};
+    }
     return {operation,
             file,
             logger().log_unique_id(unique_id),
@@ -134,6 +154,12 @@ start_io(const char* operation, const std::string& file, off64_t offset,
 void
 finish_io(PendingIoLog entry, off64_t final_offset, ssize_t actual_size,
           int err, std::uint64_t processed_chunks) {
+    if(entry.start_time_ns == 0) {
+        return;
+    }
+    if(!logging_enabled()) {
+        return;
+    }
     try {
         const auto process_id = logger().log_process_id();
         logger().enqueue(
@@ -168,6 +194,9 @@ void
 log_epoch_update(const std::string& action, std::uint64_t previous_epoch,
                  std::uint64_t current_epoch, const std::string& hostfile,
                  const std::string& unique_id, int err) {
+    if(!logging_enabled()) {
+        return;
+    }
     try {
         const auto now =
                 gkfs::malleability::common::MalleabilityLoggerBase::
@@ -197,6 +226,41 @@ log_epoch_update(const std::string& action, std::uint64_t previous_epoch,
                  true,
                  false});
     } catch(...) {
+    }
+}
+
+void
+enable_logging() {
+    logging_enabled_flag.store(true, std::memory_order_release);
+    if(logger_created.load(std::memory_order_acquire)) {
+        logger().enable();
+    }
+}
+
+void
+disable_logging() {
+    logging_enabled_flag.store(false, std::memory_order_release);
+    if(logger_created.load(std::memory_order_acquire)) {
+        logger().disable();
+    }
+}
+
+bool
+logging_enabled() {
+    if(!logging_enabled_flag.load(std::memory_order_acquire)) {
+        return false;
+    }
+    if(logger_created.load(std::memory_order_acquire)) {
+        return logger().enabled();
+    }
+    return true;
+}
+
+void
+shutdown() {
+    logging_enabled_flag.store(false, std::memory_order_release);
+    if(logger_created.load(std::memory_order_acquire)) {
+        logger().shutdown();
     }
 }
 

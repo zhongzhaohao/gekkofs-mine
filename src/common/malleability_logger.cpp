@@ -125,6 +125,7 @@ class MalleabilityLoggerBase::Impl {
 public:
     std::atomic<LogNode*> pending_head{nullptr};
     std::atomic<std::size_t> pending_count{0};
+    std::atomic<bool> enabled{true};
     std::atomic<bool> flush_requested{false};
     std::atomic<bool> shutdown_requested{false};
     std::atomic<bool> stopped{false};
@@ -221,6 +222,12 @@ MalleabilityLoggerBase::close_fd(int fd) noexcept {
 void
 MalleabilityLoggerBase::enqueue(LogEntry entry) noexcept {
     const auto saved_errno = errno;
+    if(!impl_->enabled.load(std::memory_order_acquire) ||
+       impl_->stopped.load(std::memory_order_acquire)) {
+        errno = saved_errno;
+        return;
+    }
+
     auto* node = new(std::nothrow) LogNode(std::move(entry));
     if(node == nullptr) {
         errno = saved_errno;
@@ -253,11 +260,31 @@ MalleabilityLoggerBase::flush() noexcept {
 }
 
 void
+MalleabilityLoggerBase::enable() noexcept {
+    if(!impl_->stopped.load(std::memory_order_acquire)) {
+        impl_->enabled.store(true, std::memory_order_release);
+    }
+}
+
+void
+MalleabilityLoggerBase::disable() noexcept {
+    impl_->enabled.store(false, std::memory_order_release);
+    flush_pending();
+}
+
+bool
+MalleabilityLoggerBase::enabled() const noexcept {
+    return impl_->enabled.load(std::memory_order_acquire) &&
+           !impl_->stopped.load(std::memory_order_acquire);
+}
+
+void
 MalleabilityLoggerBase::shutdown() noexcept {
     if(impl_->stopped.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
 
+    impl_->enabled.store(false, std::memory_order_release);
     impl_->shutdown_requested.store(true, std::memory_order_release);
     impl_->flush_requested.store(true, std::memory_order_release);
     impl_->cv.notify_one();

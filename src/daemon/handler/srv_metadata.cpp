@@ -73,11 +73,7 @@ refresh_file_layout_if_stale(const std::string& path,
     serialized_layout = "";
     layout_epoch = 0;
     if(daemon_epoch > client_latest_version_epoch) {
-        auto& layout_record = GKFS_DATA->file_layouts()[path];
-        if(!layout_record) {
-            layout_record =
-                    std::make_shared<gkfs::file_layout::FileLayoutRecord>();
-        }
+        auto layout_record = GKFS_DATA->file_layouts().get_or_create(path);
 
         std::lock_guard lock(layout_record->mutex);
         auto snapshot =
@@ -119,13 +115,11 @@ refresh_file_layout_if_stale(const std::string& path,
 
 void
 truncate_file_layout(const std::string& path, size_t file_size) {
-    auto& layouts = GKFS_DATA->file_layouts();
-    const auto layout_it = layouts.find(path);
-    if(layout_it == layouts.end() || !layout_it->second) {
+    auto layout_record = GKFS_DATA->file_layouts().find(path);
+    if(!layout_record) {
         return;
     }
 
-    auto& layout_record = layout_it->second;
     std::lock_guard lock(layout_record->mutex);
     const auto snapshot =
             gkfs::file_layout::load_file_layout_snapshot(layout_record);
@@ -183,9 +177,9 @@ rpc_srv_create(hg_handle_t handle) {
         auto epoch = GKFS_DATA->epoch();
 
         if(S_ISREG(in.mode)) {
-            auto& layouts = GKFS_DATA->file_layouts();
-            layouts[in.path] =
-                    gkfs::file_layout::make_file_layout_record(epoch, epoch);
+            GKFS_DATA->file_layouts().set(
+                    in.path,
+                    gkfs::file_layout::make_file_layout_record(epoch, epoch));
             out.latest_version_epoch = epoch;
         }
 
@@ -256,12 +250,12 @@ rpc_srv_stat(hg_handle_t handle) {
         if(in.update_layout == HG_TRUE) {
             gkfs::metadata::Metadata md(val);
             if(S_ISREG(md.mode())) {
-                const auto& layouts = GKFS_DATA->file_layouts();
-                const auto layout_it = layouts.find(in.path);
-                if(layout_it != layouts.end()) {
+                const auto layout_record = GKFS_DATA->file_layouts().find(
+                        in.path);
+                if(layout_record) {
                     const auto snapshot =
                             gkfs::file_layout::load_file_layout_snapshot(
-                                    layout_it->second);
+                                    layout_record);
                     if(snapshot && !snapshot->empty()) {
                         serialized_layout = snapshot->serialized_layout;
                         out.latest_version_epoch =

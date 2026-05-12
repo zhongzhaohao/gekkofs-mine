@@ -73,26 +73,26 @@ operator==(const EpochTarget& lhs, const EpochTarget& rhs) {
 gkfs::file_layout::FileLayoutSnapshotPtr
 load_layout_snapshot_for_path(const std::string& path) {
     auto& layouts = CTX->file_layouts();
-    auto it = layouts.find(path);
-    if(it == layouts.end() && CTX->use_workflow()) {
+    auto record = layouts.find(path);
+    if(!record && CTX->use_workflow()) {
         for(const auto& host_config : CTX->hostsconfig()) {
             const auto prefix = "/" + host_config.flowname;
             if(path == prefix) {
-                it = layouts.find("/");
+                record = layouts.find("/");
                 break;
             }
             if(path.rfind(prefix + "/", 0) == 0) {
-                it = layouts.find(path.substr(prefix.size()));
+                record = layouts.find(path.substr(prefix.size()));
                 break;
             }
         }
     }
 
-    if(it == layouts.end()) {
+    if(!record) {
         return {};
     }
 
-    return gkfs::file_layout::load_file_layout_snapshot(it->second);
+    return gkfs::file_layout::load_file_layout_snapshot(record);
 }
 
 gkfs::file_layout::epoch_t

@@ -51,6 +51,11 @@ constexpr auto use_workflow = "off";
 constexpr auto use_malleability = false; // we will make epoch in metadata at future version, do not make this true for now 
 constexpr auto use_bloom = false;
 
+namespace malleability {
+constexpr auto client_logging = true;
+constexpr auto daemon_logging = true;
+} // namespace malleability
+
 namespace io {
 /*
  * Zero buffer before read. This is relevant if sparse files are used.

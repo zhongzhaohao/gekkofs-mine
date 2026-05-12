@@ -286,11 +286,11 @@ PreloadContext::file_layouts() {
 
 gkfs::file_layout::epoch_t
 PreloadContext::file_layout_latest_version_epoch(const std::string& path) const {
-    const auto it = file_layouts_.find(path);
-    if(it == file_layouts_.end()) {
+    const auto record = file_layouts_.find(path);
+    if(!record) {
         return 0;
     }
-    return gkfs::file_layout::file_layout_latest_version_epoch(it->second);
+    return gkfs::file_layout::file_layout_latest_version_epoch(record);
 }
 
 gkfs::file_layout::epoch_t

@@ -42,6 +42,18 @@ log_epoch_update(const std::string& action, std::uint64_t previous_epoch,
                  std::uint64_t current_epoch, const std::string& hostfile,
                  const std::string& unique_id, int err);
 
+void
+enable_logging();
+
+void
+disable_logging();
+
+bool
+logging_enabled();
+
+void
+shutdown();
+
 } // namespace gkfs::daemon::malleability
 
 #endif // GEKKOFS_DAEMON_MALLEABILITY_LOGGER_HPP

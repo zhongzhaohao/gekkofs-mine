@@ -2,16 +2,19 @@
 #define GEKKOFS_COMMON_FILE_LAYOUT_HPP
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <map>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace gkfs::file_layout {
@@ -183,7 +186,6 @@ struct FileLayoutRecord {
 };
 
 using FileLayoutRecordPtr = std::shared_ptr<FileLayoutRecord>;
-using FileLayoutMap = std::map<std::string, FileLayoutRecordPtr>;
 
 inline FileLayoutSnapshotPtr
 make_file_layout_snapshot(epoch_t latest_version_epoch, epoch_t init_epoch) {
@@ -262,6 +264,77 @@ publish_file_layout_snapshot_if_newer(FileLayoutRecordPtr& record,
         }
     }
 }
+
+class FileLayoutRegistry {
+private:
+    struct Shard {
+        mutable std::shared_mutex mutex;
+        std::unordered_map<std::string, FileLayoutRecordPtr> records;
+    };
+
+    static constexpr std::size_t shard_count = 64;
+    std::array<Shard, shard_count> shards_;
+
+    [[nodiscard]] Shard&
+    shard_for(std::string_view path) noexcept {
+        const auto hash = std::hash<std::string_view>{}(path);
+        return shards_[hash % shard_count];
+    }
+
+    [[nodiscard]] const Shard&
+    shard_for(std::string_view path) const noexcept {
+        const auto hash = std::hash<std::string_view>{}(path);
+        return shards_[hash % shard_count];
+    }
+
+public:
+    [[nodiscard]] FileLayoutRecordPtr
+    find(const std::string& path) const {
+        const auto& shard = shard_for(path);
+        std::shared_lock lock(shard.mutex);
+        const auto it = shard.records.find(path);
+        if(it == shard.records.end()) {
+            return {};
+        }
+        return it->second;
+    }
+
+    [[nodiscard]] FileLayoutRecordPtr
+    get_or_create(const std::string& path) {
+        auto& shard = shard_for(path);
+        std::unique_lock lock(shard.mutex);
+        auto& record = shard.records[path];
+        if(!record) {
+            record = std::make_shared<FileLayoutRecord>();
+        }
+        return record;
+    }
+
+    void
+    set(const std::string& path, FileLayoutRecordPtr record) {
+        auto& shard = shard_for(path);
+        std::unique_lock lock(shard.mutex);
+        shard.records[path] = std::move(record);
+    }
+
+    void
+    publish_if_newer(const std::string& path, epoch_t latest_version_epoch,
+                     std::string_view serialized_layout) {
+        auto record = get_or_create(path);
+        std::lock_guard lock(record->mutex);
+        publish_file_layout_snapshot_if_newer(record, latest_version_epoch,
+                                              serialized_layout);
+    }
+
+    void
+    erase(const std::string& path) {
+        auto& shard = shard_for(path);
+        std::unique_lock lock(shard.mutex);
+        shard.records.erase(path);
+    }
+};
+
+using FileLayoutMap = FileLayoutRegistry;
 
 } // namespace gkfs::file_layout
 

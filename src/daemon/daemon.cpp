@@ -42,6 +42,7 @@
 #include <common/statistics/stats.hpp>
 
 #include <daemon/env.hpp>
+#include <daemon/malleability_logger.hpp>
 #include <daemon/handler/rpc_defs.hpp>
 #include <daemon/ops/metadentry.hpp>
 #include <daemon/backend/metadata/db.hpp>
@@ -460,6 +461,7 @@ destroy_enviroment() {
     GKFS_DATA->close_stats();
     if(GKFS_DATA->is_initialized())
         gkfs_end();
+    gkfs::daemon::malleability::shutdown();
 }
 
 /**
